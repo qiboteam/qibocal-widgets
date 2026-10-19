@@ -4,7 +4,7 @@ import pytest
 from conftest import NPOINTS, TARGETS
 
 from qibocal_widgets import Report, data_frames, reports, reports_of
-from qibocal_widgets._core import label
+from qibocal_widgets._core.data import label
 
 
 def test_data_frames_from_records(acquired):

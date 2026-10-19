@@ -45,7 +45,7 @@ def test_display_protocol(widget_executor, bound):
 def test_ipython_display_calls_display(widget_executor, bound, monkeypatch):
     completed = widget_executor(bound)
     shown = []
-    monkeypatch.setattr("qibocal_widgets.jupyter.ipy_display", shown.append)
+    monkeypatch.setattr("qibocal_widgets._core.jupyter.ipy_display", shown.append)
     completed._ipython_display_()
     # nested outputs also go through display(); the outermost widget is last
     assert isinstance(shown[-1], widgets.Tab)

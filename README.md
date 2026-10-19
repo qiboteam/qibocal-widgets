@@ -68,16 +68,23 @@ qibocal = { git = "https://github.com/qiboteam/qibocal.git", branch = "protodev"
 
 ## Layout
 
-- `qibocal_widgets._core`: frontend-agnostic extraction (data tables as
-  `pandas.DataFrame`, normalized reports with Plotly figures and HTML tables).
-- `qibocal_widgets._executor`: `WidgetExecutor`, the `Executor` subclass
-  re-wrapping the output of every phase into a configurable `Completed`
-  subclass.
+The public interface is made of three modules, which only re-export objects
+implemented in the private `qibocal_widgets._core` subpackage:
+
+- `qibocal_widgets`: frontend-agnostic building blocks (`WidgetExecutor`,
+  `convert`, `data_frames`, `reports`, `Report`, ...).
 - `qibocal_widgets.marimo`: `MarimoExecutor`, `MarimoCompleted` (implements
   `_display_`), `show_data`, `show_reports`.
 - `qibocal_widgets.jupyter`: `JupyterExecutor`, `JupyterCompleted` (implements
   `_ipython_display_`, rendering with `ipywidgets`), `show_data`,
   `show_reports`.
+
+Inside `_core`: `data` and `reports` (extraction, no frontend import),
+`executor` (the `Executor` subclass re-wrapping the output of every phase),
+`marimo` and `jupyter` (rendering).
+
+Other folders:
+
 - `examples/`: a Marimo and a Jupyter notebook.
 - `docs/plan/`: design notes and the roadmap of possible extensions.
 

@@ -18,9 +18,12 @@ reported  # raw data + per-target reports
 
 ## How it works
 
-Three layers, with the frontends kept as thin as possible.
+Three layers, with the frontends kept as thin as possible. All the
+implementation lives in the private `qibocal_widgets._core` subpackage; the
+public modules (`qibocal_widgets`, `qibocal_widgets.marimo`,
+`qibocal_widgets.jupyter`) only re-export from it, which a test enforces.
 
-### 1. Core (`qibocal_widgets._core`)
+### 1. Extraction (`_core.data`, `_core.reports`)
 
 Pure data manipulation, no frontend import.
 
@@ -35,7 +38,7 @@ Pure data manipulation, no frontend import.
   callback returned (per-target `(figures, table)` tuples, a single figure, a
   list of figures, bare HTML) into a `Report(figures, table, extra)` object.
 
-### 2. Executor wrapper (`qibocal_widgets._executor`)
+### 2. Executor wrapper (`_core.executor`)
 
 `WidgetExecutor(qibocal.Executor)` overrides `__call__`, `acquire`, `fit`,
 `report`, `update` (and adds `load`) to pass their output through
@@ -52,7 +55,7 @@ executor.
 All the constructors of `Executor` (`create`, `open`, the default one) and the
 context manager protocol are inherited untouched.
 
-### 3. Frontends (`qibocal_widgets.marimo`, `qibocal_widgets.jupyter`)
+### 3. Frontends (`_core.marimo`, `_core.jupyter`)
 
 Each defines:
 
