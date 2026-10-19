@@ -4,6 +4,8 @@ Notebook integration for the [Qibocal](https://github.com/qiboteam/qibocal)
 executor, for both [Marimo](https://marimo.io) and
 [Jupyter](https://jupyter.org).
 
+Documentation: <https://qibo.science/qibocal-widgets/latest/>
+
 > **Status**: early development. The package targets the executor interface
 > developed on the `protodev` branch of Qibocal, which is not yet released.
 
@@ -86,14 +88,17 @@ Inside `_core`: `data` and `reports` (extraction, no frontend import),
 Other folders:
 
 - `examples/`: a Marimo and a Jupyter notebook.
+- `docs/source/`: Sphinx documentation, published at
+  <https://qibo.science/qibocal-widgets/latest/>.
 - `docs/plan/`: design notes and the roadmap of possible extensions.
 
 ## Development
 
 ```sh
-uv sync --all-extras --group tests --group analysis
+uv sync --all-extras --group tests --group analysis --group docs
 uv run pytest
 uv run ruff check . && uv run ruff format --check .
+uv run --with poethepoet poe docs  # HTML in docs/build/html
 ```
 
 Continuous integration reuses the

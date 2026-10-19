@@ -37,6 +37,11 @@ tests = [
 analysis = [
   "ruff>=0.16.0,<0.17.0",
 ]
+docs = [
+  "sphinx>=9.0.0,<10.0.0",
+  "furo>=2025.7.19,<2026.0.0",
+  "sphinx-copybutton>=0.5.1,<0.6.0",
+]
 dev = [
   "ipykernel>=6.0.0",
   "jupyterlab>=4.0.0",
@@ -71,6 +76,9 @@ lint-warnings = """
            RET,SLF,SLOT,SIM,TC,INT,ARG,PTH,ERA,NPY,PERF,RUF
 """
 types = "true"
+docs = "make -C docs html"
+docs-clean = "make -C docs clean"
+test-docs = "make -C docs doctest"
 
 [tool.pytest.ini_options]
 testpaths = ["tests/"]

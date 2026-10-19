@@ -34,14 +34,17 @@ installed from PyPI would resolve to the released Qibocal, which lacks the
 
 ## Documentation
 
-- The reusable `docs.yml` workflow runs `poe docs` and uploads an artifact;
-  `latest-stable.yml` publishes to GitHub Pages with versioning. Start with
-  the former, exporting the Marimo example to HTML (`marimo export html`) as
-  qibolab-simulator does, since the examples are the documentation.
-- A rendered Jupyter example (`jupyter nbconvert --execute`) needs a platform;
-  only possible with the mock platform available, see above.
-- A Sphinx site is overkill until the API grows; the README and `docs/plan`
-  suffice.
+Implemented: a Sphinx site in `docs/source/` with the Qibo `furo` theme,
+built by `poe docs` and published by `docs.yml` through the reusable
+`latest-stable.yml` workflow (`latest` from `main`, `stable` from tags) at
+<https://qibo.science/qibocal-widgets/>. Remaining:
+
+- Embed the Marimo example as a rendered page (`marimo export html`, or the
+  `marimo` Sphinx integration); it needs a platform, so it depends on the mock
+  platform being available, see above.
+- Same for the Jupyter example (`nbsphinx` or `myst-nb` with execution).
+- Enable `test-docs` (doctests) in the test workflow once the docs contain
+  runnable examples.
 
 ## Pre-commit / prek
 
