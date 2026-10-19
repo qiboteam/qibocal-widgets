@@ -83,6 +83,12 @@ def completed(executor, bound):
 
 
 @pytest.fixture
+def single(executor, bound):
+    """A fully executed plain execution, on a single target."""
+    return executor(bound, targets=TARGETS[:1])
+
+
+@pytest.fixture
 def acquired(executor, bound):
     """An execution stopped after acquisition."""
     return executor.acquire(bound)

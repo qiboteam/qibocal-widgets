@@ -57,6 +57,40 @@ def test_acquired_shows_only_data(widget_executor, bound):
     assert titles(widget) == [f"Raw data: {t}" for t in TARGETS]
 
 
+def test_reports_tab_selected(completed):
+    tabs = display(completed)
+    assert tabs.get_title(tabs.selected_index) == "Reports"
+
+
+def test_data_tab_selected_without_reports(completed):
+    """Without reports, the first available section is selected."""
+    failed = wrap(completed)
+    failed.reports = None
+    failed.error = RuntimeError("boom")
+    tabs = display(failed)
+    assert tabs.get_title(tabs.selected_index) == "Data"
+
+
+@pytest.mark.parametrize("show", [show_data, show_reports])
+def test_single_target_expanded(single, completed, show):
+    assert show(single).selected_index == 0
+    assert show(completed).selected_index is None
+
+
+def test_fit_results_folded_above_plot(single):
+    (item,) = show_reports(single).children
+    assert isinstance(item, widgets.VBox)
+    fit, plots = item.children
+    # nested fit results come first, folded, and centered
+    assert isinstance(fit, widgets.Accordion)
+    assert titles(fit) == ["Fit results"]
+    assert fit.selected_index is None
+    (centered,) = fit.children
+    assert centered.layout.justify_content == "center"
+    assert "<table>" in centered.children[0].value
+    assert isinstance(plots, widgets.Output)
+
+
 def test_show_helpers(completed):
     assert isinstance(show_data(completed), widgets.Accordion)
     assert isinstance(show_data(completed.data), widgets.Accordion)

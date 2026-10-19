@@ -50,9 +50,20 @@ displays an accordion with one raw data table per target, while
     reported = executor.report(executor.fit(acquired))
     reported
 
-displays two tabs: the raw data, and the per-target reports (figures and fit
-table). Phases not yet executed are simply omitted, and an *Error* section
-appears for failed executions.
+displays two tabs: the raw data, and the per-target reports. Phases not yet
+executed are simply omitted, and an *Error* section appears for failed
+executions.
+
+The initial layout is chosen to show the most relevant content first:
+
+- the *Reports* tab is selected whenever reports are available;
+- per-target accordions start folded, except when there is a single target,
+  which starts expanded;
+- within each report, the plots are visible right away, while the fit results
+  table sits above them, centered, in a nested *Fit results* section folded by
+  default.
+
+Everything can still be expanded or folded interactively.
 
 The returned objects are subclasses of Qibocal's ``Completed``, with exactly
 the same attributes (``data``, ``results``, ``reports``, ``targets``, ...):

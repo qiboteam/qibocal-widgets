@@ -8,7 +8,8 @@ from typing import Any
 import marimo as mo
 from qibocal.auto.task import Completed
 
-from .data import data_frames, label
+from . import layout
+from .data import data_frames
 from .executor import WidgetExecutor, convert
 from .reports import Report, reports, reports_of
 
@@ -32,22 +33,26 @@ def show_data(data: Any) -> mo.Html:
     if isinstance(data, Completed):
         data = data.data
     tables = {
-        f"Raw data: {label(target)}": mo.ui.table(frame)
+        layout.data_title(target): mo.ui.table(frame)
         for target, frame in data_frames(data).items()
     }
     if not tables:
         return mo.callout(mo.md("No acquired data to display."), kind="warn")
-    return mo.accordion(tables)
+    return mo.accordion(tables, expanded=layout.expanded(tables))
 
 
 def _report_item(report: Report) -> mo.Html:
-    plots: list[Any] = [mo.ui.plotly(figure) for figure in report.figures]
+    items: list[Any] = []
     if report.table:
-        plots.append(mo.Html(report.table))
-    plots.extend(mo.plain_text(str(extra)) for extra in report.extra)
-    if not plots:
-        plots.append(mo.md("*Empty report.*"))
-    return mo.vstack(plots)
+        # folded by default, so that only the plots are visible at first
+        items.append(
+            mo.accordion({layout.FIT_RESULTS: mo.center(mo.Html(report.table))})
+        )
+    items.extend(mo.ui.plotly(figure) for figure in report.figures)
+    items.extend(mo.plain_text(str(extra)) for extra in report.extra)
+    if not items:
+        items.append(mo.md("*Empty report.*"))
+    return mo.vstack(items)
 
 
 def show_reports(reports_: Any) -> mo.Html:
@@ -61,35 +66,33 @@ def show_reports(reports_: Any) -> mo.Html:
         reports(reports_) if isinstance(reports_, Completed) else reports_of(reports_)
     )
     outputs = {
-        ("Report" if target is None else f"Target {label(target)}"): _report_item(
-            report
-        )
+        layout.report_title(target): _report_item(report)
         for target, report in items.items()
     }
     if not outputs:
         return mo.callout(mo.md("No report to display."), kind="warn")
-    return mo.accordion(outputs)
+    return mo.accordion(outputs, expanded=layout.expanded(outputs))
 
 
 def display(completed: Completed) -> mo.Html:
     """Full rendering of an execution: data and, when available, reports."""
     sections: dict[str, Any] = {}
     try:
-        sections["Data"] = show_data(completed.data)
+        sections[layout.DATA] = show_data(completed.data)
     except ValueError:
         # no acquisition data (e.g. not yet loaded, or acquisition failed)
         pass
     if completed.reports is not None:
-        sections["Reports"] = show_reports(completed.reports)
+        sections[layout.REPORTS] = show_reports(completed.reports)
     if completed.error is not None:
-        sections["Error"] = mo.callout(
+        sections[layout.ERROR] = mo.callout(
             mo.plain_text(repr(completed.error)), kind="danger"
         )
     if not sections:
         return mo.callout(mo.md("Nothing to display yet."), kind="neutral")
     if len(sections) == 1:
         return next(iter(sections.values()))
-    return mo.ui.tabs(sections)
+    return mo.ui.tabs(sections, value=layout.initial_section(sections))
 
 
 @dataclass

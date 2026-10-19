@@ -10,11 +10,11 @@ from dataclasses import dataclass
 from typing import Any
 
 import ipywidgets as widgets
-from IPython.display import HTML
 from IPython.display import display as ipy_display
 from qibocal.auto.task import Completed
 
-from .data import data_frames, label
+from . import layout
+from .data import data_frames
 from .executor import WidgetExecutor, convert
 from .reports import Report, reports, reports_of
 
@@ -37,12 +37,14 @@ def _output(*objects: Any) -> widgets.Output:
     return out
 
 
-def _accordion(items: dict[str, widgets.Widget]) -> widgets.Accordion:
+def _accordion(
+    items: dict[str, widgets.Widget], expanded: bool = False
+) -> widgets.Accordion:
+    """Accordion with the given titles, optionally with the first item open."""
     accordion = widgets.Accordion(children=list(items.values()))
     for index, title in enumerate(items):
         accordion.set_title(index, title)
-    if items:
-        accordion.selected_index = 0
+    accordion.selected_index = 0 if expanded and items else None
     return accordion
 
 
@@ -60,22 +62,35 @@ def show_data(data: Any) -> widgets.Widget:
     if isinstance(data, Completed):
         data = data.data
     tables = {
-        f"Raw data: {label(target)}": _output(frame)
+        layout.data_title(target): _output(frame)
         for target, frame in data_frames(data).items()
     }
     if not tables:
         return _message("No acquired data to display.")
-    return _accordion(tables)
+    return _accordion(tables, expanded=layout.expanded(tables))
+
+
+def _fit_results(table: str) -> widgets.Accordion:
+    """Fit results table, centered, folded in a nested accordion."""
+    centered = widgets.Box(
+        [widgets.HTML(table)],
+        layout=widgets.Layout(justify_content="center", width="100%"),
+    )
+    return _accordion({layout.FIT_RESULTS: centered})
 
 
 def _report_item(report: Report) -> widgets.Widget:
     objects: list[Any] = list(report.figures)
-    if report.table:
-        objects.append(HTML(report.table))
     objects.extend(str(extra) for extra in report.extra)
-    if not objects:
+    children: list[widgets.Widget] = []
+    if report.table:
+        # folded by default, so that only the plots are visible at first
+        children.append(_fit_results(report.table))
+    if objects:
+        children.append(_output(*objects))
+    if not children:
         return _message("Empty report.")
-    return _output(*objects)
+    return widgets.VBox(children)
 
 
 def show_reports(reports_: Any) -> widgets.Widget:
@@ -89,28 +104,26 @@ def show_reports(reports_: Any) -> widgets.Widget:
         reports(reports_) if isinstance(reports_, Completed) else reports_of(reports_)
     )
     outputs = {
-        ("Report" if target is None else f"Target {label(target)}"): _report_item(
-            report
-        )
+        layout.report_title(target): _report_item(report)
         for target, report in items.items()
     }
     if not outputs:
         return _message("No report to display.")
-    return _accordion(outputs)
+    return _accordion(outputs, expanded=layout.expanded(outputs))
 
 
 def display(completed: Completed) -> widgets.Widget:
     """Full rendering of an execution: data and, when available, reports."""
     sections: dict[str, widgets.Widget] = {}
     try:
-        sections["Data"] = show_data(completed.data)
+        sections[layout.DATA] = show_data(completed.data)
     except ValueError:
         # no acquisition data (e.g. not yet loaded, or acquisition failed)
         pass
     if completed.reports is not None:
-        sections["Reports"] = show_reports(completed.reports)
+        sections[layout.REPORTS] = show_reports(completed.reports)
     if completed.error is not None:
-        sections["Error"] = widgets.HTML(
+        sections[layout.ERROR] = widgets.HTML(
             f"<pre style='color: var(--jp-error-color1, red)'>{completed.error!r}</pre>"
         )
     if not sections:
@@ -120,6 +133,7 @@ def display(completed: Completed) -> widgets.Widget:
     tabs = widgets.Tab(children=list(sections.values()))
     for index, title in enumerate(sections):
         tabs.set_title(index, title)
+    tabs.selected_index = list(sections).index(layout.initial_section(sections))
     return tabs
 
 

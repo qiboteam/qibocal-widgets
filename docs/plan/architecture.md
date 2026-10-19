@@ -57,11 +57,16 @@ context manager protocol are inherited untouched.
 
 ### 3. Frontends (`_core.marimo`, `_core.jupyter`)
 
+Titles and initial states are a shared policy in `_core.layout`: the
+*Reports* tab is selected when available, per-target accordions start
+expanded only for a single target, and the fit results table is placed above
+the plots, centered, in a nested section folded by default.
+
 Each defines:
 
 - `show_data(data | completed)` and `show_reports(reports | completed)`: the
-  explicit helpers, with the same look as the original ones (accordion per
-  target; figures stacked above the fit table).
+  explicit helpers (accordion per target; folded fit table above the
+  figures).
 - `display(completed)`: data and reports in tabs, plus an error section when
   the execution failed. Sections that are not available are omitted.
 - `<Frontend>Completed(Completed)`: implements the display protocol of the

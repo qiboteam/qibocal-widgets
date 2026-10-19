@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from conftest import TARGETS
 
@@ -51,6 +53,40 @@ def test_acquired_shows_only_data(widget_executor, bound):
     html = render(acquired)
     assert "Raw data: 0" in html
     assert "Target 0" not in html
+
+
+def expanded_items(html: str) -> list[str]:
+    """Expanded state of every accordion, outermost first."""
+    return re.findall(r"data-expanded='([^']*)'", html)
+
+
+def test_reports_tab_selected(completed):
+    tabs = display(completed)
+    assert isinstance(tabs, marimo.ui.tabs)
+    assert tabs.value == "Reports"
+
+
+def test_data_tab_selected_without_reports(completed):
+    """Without reports, the first available section is selected."""
+    failed = wrap(completed)
+    failed.reports = None
+    failed.error = RuntimeError("boom")
+    assert display(failed).value == "Data"
+
+
+@pytest.mark.parametrize("show", [show_data, show_reports])
+def test_single_target_expanded(single, completed, show):
+    assert expanded_items(show(single).text)[0] == "[&quot;0&quot;]"
+    assert expanded_items(show(completed).text)[0] == "[]"
+
+
+def test_fit_results_folded_above_plot(single):
+    html = show_reports(single).text
+    # outer per-target accordion expanded, nested fit results folded
+    assert expanded_items(html) == ["[&quot;0&quot;]", "[]"]
+    assert html.index("Fit results") < html.index("marimo-plotly")
+    # horizontally centered by mo.center (a column flexbox)
+    assert "align-items: center" in html
 
 
 def test_show_helpers(completed):
