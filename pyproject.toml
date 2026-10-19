@@ -1,0 +1,77 @@
+[project]
+name = "qibocal-widgets"
+version = "0.0.1"
+description = "Notebook integration for the Qibocal executor: Marimo and Jupyter interfaces."
+authors = [{ name = "The Qibo team" }]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+readme = "README.md"
+keywords = ["qibo", "qibocal", "calibration", "marimo", "jupyter"]
+classifiers = [
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "qibocal>=0.2.7",
+  "numpy>=2.0.0,<3.0.0",
+  "pandas>=2.2.0,<4.0.0",
+  "plotly>=5.24.0,<8.0.0",
+]
+
+[project.optional-dependencies]
+marimo = ["marimo>=0.24.0"]
+jupyter = ["ipython>=8.0.0", "ipywidgets>=8.0.0"]
+
+[project.urls]
+Homepage = "https://qibo.science/"
+Repository = "https://github.com/qiboteam/qibocal-widgets/"
+
+[dependency-groups]
+tests = [
+  "pytest>=9.0.0,<10.0.0",
+  "pytest-cov>=7.0.0,<8.0.0",
+]
+analysis = [
+  "ruff>=0.16.0,<0.17.0",
+]
+dev = [
+  "ipykernel>=6.0.0",
+  "jupyterlab>=4.0.0",
+]
+
+[tool.uv.sources]
+# The package targets the executor interface currently developed on the
+# `protodev` branch of Qibocal, not yet released on PyPI.
+qibocal = { git = "https://github.com/qiboteam/qibocal.git", branch = "protodev" }
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+extend-select = ["I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Marimo notebooks use bare expressions to render output, and generated `return`s
+"examples/*.py" = ["B018", "PLR1711"]
+
+[tool.poe.tasks]
+test = "pytest"
+lint = "ruff check"
+lint-warnings = """
+  ruff check --exit-zero \
+  --select F,E,W,C90,N,UP,BLE,FBT,B,A,C4,T10,EM,EXE,ISC,ICN,LOG,G,INP,PIE,T20,PT,Q,RSE,\
+           RET,SLF,SLOT,SIM,TC,INT,ARG,PTH,ERA,NPY,PERF,RUF
+"""
+types = "true"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/"]
+addopts = ["--cov=qibocal_widgets", "--cov-report=xml", "--cov-report=term-missing"]
