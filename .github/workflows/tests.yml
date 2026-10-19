@@ -1,0 +1,30 @@
+name: Tests
+
+on:
+  workflow_dispatch:
+  # TODO: automatic triggers are disabled until the CODECOV_TOKEN secret is
+  # configured, since the reusable test action fails when the coverage upload
+  # fails (on Linux runners).
+  # push:
+  # merge_group:
+  # pull_request:
+  #   types: [labeled, opened]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: contains(github.event.pull_request.labels.*.name, 'run-workflow') || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+    uses: qiboteam/workflows/.github/workflows/test.yml@uv
+    with:
+      os: ${{ matrix.os }}
+      python-version: ${{ matrix.python-version }}
+      uv-extras: --locked --no-dev --group tests --group analysis --all-extras
+    secrets: inherit

@@ -1,0 +1,25 @@
+name: Deploy
+
+on:
+  push:
+  merge_group:
+  release:
+    types:
+      - published
+
+concurrency:
+  group: wheels-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: qiboteam/workflows/.github/workflows/wheels.yml@uv
+    with:
+      os: ubuntu-latest
+      python-version: "3.12"
+      # Publishing is disabled until Qibocal releases the executor interface
+      # developed on `protodev`: a wheel depending on an unreleased Qibocal
+      # would not be installable from PyPI.
+      publish: false
+      uv-extras: --locked --no-dev --all-extras
+    secrets: inherit
