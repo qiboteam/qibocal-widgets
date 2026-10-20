@@ -20,7 +20,9 @@ def _find(module_name: str | None, protocol: Protocol) -> str | None:
     except ImportError:
         return None
     for attribute, value in vars(module).items():
-        if value is protocol:
+        # equality, not identity: copies (e.g. in the tasks of loaded
+        # executions) share the same callbacks
+        if isinstance(value, Protocol) and value == protocol:
             return attribute
     return None
 

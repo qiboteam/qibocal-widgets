@@ -472,3 +472,40 @@ def test_session_records_remote(cluster, tmp_path):
     assert json.loads((path / "meta.json").read_text())["platform"] == "mock"
     assert json.loads((path / "history.json").read_text()) == ["ramsey_signal-0"]
     assert (path / "data" / "ramsey_signal-0" / "results.json").is_file()
+
+
+def test_session_remote_state(cluster, tmp_path, bound):
+    """Remote updates are recorded, and attaching restores them remotely."""
+    from qibocal_widgets import Session
+
+    path = tmp_path / "session"
+    remote = Remote(ssh="me@login", queue="chip", platform="mock")
+    executor = Executor(
+        None, path=path, targets=TARGETS[:1], update=True, runner=remote
+    )
+    with pytest.warns(UserWarning, match="not a registered"):
+        completed = executor(bound)
+    peak = completed.results.peak[0]
+    drive = create_calibration_platform("mock").qubits[0].drive
+    recorded = json.loads((path / "new_platform" / "parameters.json").read_text())
+    assert recorded["configs"][drive]["frequency"] == peak * 1e9
+    # the remote platform state was unknown at the start
+    assert not (path / "platform").exists()
+
+    fresh = Remote(ssh="me@login", queue="chip", platform="mock")
+    attached = Executor(
+        None, session=Session.attach(path), targets=TARGETS[:1], runner=fresh
+    )
+    assert fresh.state == remote.state
+    with pytest.warns(UserWarning):
+        again = attached.acquire(bound)
+    assert again.data.scale == {0: peak * 1e9}
+
+
+def test_reference_of_copies():
+    """Loaded executions hold copies of their protocol."""
+    import copy
+
+    assert jobs.protocol_reference(copy.deepcopy(protocols.ramsey_signal)) == (
+        "qibocal.protocols:ramsey_signal"
+    )
