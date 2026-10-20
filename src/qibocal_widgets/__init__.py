@@ -20,8 +20,10 @@ Frontends live in their own modules:
 - :mod:`qibocal_widgets.marimo` (requires the ``marimo`` extra)
 - :mod:`qibocal_widgets.jupyter` (requires the ``jupyter`` extra)
 
-Without an explicit ``path``, ``Executor.create`` and ``Executor.open`` write
-to a fresh folder of the session's reports folder (:func:`reports_dir`).
+Executions are recorded in a :class:`Session` folder, appended for as long as
+the executor lives. Without an explicit ``path``, ``Executor.create`` and
+``Executor.open`` use a fresh folder of the session's reports folder
+(:func:`reports_dir`).
 
 This module also exposes the frontend-agnostic building blocks, useful to
 write further runners, middleware, and frontends.
@@ -35,6 +37,7 @@ from ._core.middleware import Middleware
 from ._core.output import reports_dir
 from ._core.reports import Report, reports, reports_of
 from ._core.runner import Local, Runner
+from ._core.session import Session, SessionExists
 from ._core.version import __version__
 
 __all__ = [
@@ -45,6 +48,8 @@ __all__ = [
     "Middleware",
     "Report",
     "Runner",
+    "Session",
+    "SessionExists",
     "View",
     "__version__",
     "convert",

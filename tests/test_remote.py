@@ -450,3 +450,25 @@ def test_install_pip_fallback(tmp_path, monkeypatch):
     assert outcome["installed"]
     assert commands[0] == ["/usr/bin/python3.12", "-m", "venv", str(env)]
     assert commands[1][:4] == [str(env / "bin" / "python"), "-m", "pip", "install"]
+
+
+def test_session_records_remote(cluster, tmp_path):
+    """Remote acquisitions are recorded, with the remote platform name."""
+    path = tmp_path / "session"
+    executor = Executor(
+        None,
+        path=path,
+        targets=TARGETS,
+        update=False,
+        runner=Remote(queue="chip", platform="mock"),
+    )
+    bound = protocols.ramsey_signal(
+        delay_between_pulses_start=10,
+        delay_between_pulses_end=100,
+        delay_between_pulses_step=30,
+    )
+    with executor:  # no local context: the session starts anyway
+        executor(bound)
+    assert json.loads((path / "meta.json").read_text())["platform"] == "mock"
+    assert json.loads((path / "history.json").read_text()) == ["ramsey_signal-0"]
+    assert (path / "data" / "ramsey_signal-0" / "results.json").is_file()

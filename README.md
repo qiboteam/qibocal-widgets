@@ -66,8 +66,11 @@ run locally; named connections are shared with qibocal-report:
 executor = Executor(None, targets=[0, 1], runner=Remote("lab"), frontends=[Marimo()])
 ```
 
-In notebook sessions with a reports folder (`QIBOCAL_REPORTS_DIR`, set by
-qibocal-report), `Executor.create` and `Executor.open` default to a fresh
+Every execution is recorded in the executor's session folder, appended for as
+long as the instance lives, in the layout of Qibocal's outputs: start a new
+folder with `executor.new_session()`, or continue an existing one with
+`Executor.attach(path)`. In notebook sessions with a reports folder
+(`QIBOCAL_REPORTS_DIR`, set by qibocal-report), the folder defaults to a fresh
 subfolder of it, so calibrations show up in its report dashboard;
 `reports_dir()` returns the folder.
 

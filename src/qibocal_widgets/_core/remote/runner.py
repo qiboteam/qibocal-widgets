@@ -91,9 +91,12 @@ class Remote(Runner):
             return jobs.platform_state(executor.platform)
         return self.state
 
-    def open(self, executor: Executor, force: bool = False) -> None:
+    def platform_name(self, executor: Executor) -> str | None:
+        return self.connection.platform or super().platform_name(executor)
+
+    def open(self, executor: Executor) -> None:
         if not self.connection.dispatched:
-            return super().open(executor, force)
+            return super().open(executor)
         # the platform is connected remotely, by each acquisition
         return None
 

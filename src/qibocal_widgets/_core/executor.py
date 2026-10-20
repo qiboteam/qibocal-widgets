@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from functools import partial
 from typing import Any
 
@@ -28,6 +29,7 @@ from .frontend import Frontend
 from .middleware import Middleware
 from .output import REPORTS_DIR, default_path
 from .runner import Local, Runner
+from .session import Session
 
 __all__ = ["Executor"]
 
@@ -49,11 +51,18 @@ class Executor(QibocalExecutor):
     a fresh folder of the session's reports folder, if any (see
     :func:`~qibocal_widgets.reports_dir`).
 
+    An executor with an output path records every execution in its
+    :class:`Session` folder, appending for as long as the instance lives,
+    until a new session is started (:meth:`new_session`). A new executor can
+    continue an existing folder (:meth:`attach`).
+
     Args:
         platform: as in :class:`qibocal.Executor`.
         runner: where and how the steps run. Defaults to :class:`Local`.
         middleware: wrapping every step, the first being the outermost.
         frontends: displaying every output.
+        session: the session recording the executions. Defaults to a new
+            session in ``path``, if given, and to none otherwise.
         **kwargs: forwarded to :class:`qibocal.Executor`.
 
     Raises:
@@ -67,9 +76,17 @@ class Executor(QibocalExecutor):
         runner: Runner | None = None,
         middleware: Iterable[Middleware] = (),
         frontends: Iterable[Frontend] = (),
+        session: Session | None = None,
         **kwargs: Any,
     ):
+        if session is not None:
+            kwargs["path"] = session.path
+            kwargs["meta"] = session.meta
         super().__init__(platform, **kwargs)
+        if session is None and self.path is not None:
+            session = Session(self.path, self.meta)
+        self.session: Session | None = session
+        """The session recording the executions, if any."""
         self.runner: Runner = _check(
             [runner if runner is not None else Local()], Runner, "runners"
         )[0]
@@ -129,6 +146,73 @@ class Executor(QibocalExecutor):
         ) as executor:
             yield executor
 
+    @classmethod
+    def attach(
+        cls,
+        path: os.PathLike,
+        targets: Targets | None = None,
+        platform: Any = None,
+        *,
+        restore_platform: bool = True,
+        **kwargs: Any,
+    ) -> Executor:
+        """Create an executor appending to an existing session folder.
+
+        Args:
+            path: the session folder.
+            targets: as in :meth:`create`.
+            platform: as in :meth:`create`. Defaults to the platform recorded
+                in the session metadata.
+            restore_platform: apply the latest platform state recorded in the
+                folder, continuing the calibration where the session left it.
+            **kwargs: as in the constructor.
+
+        Raises:
+            FileNotFoundError: if the folder holds no session.
+        """
+        session = Session.attach(path)
+        if platform is None:
+            platform = session.meta.platform
+        executor = super().create(path, targets=targets, platform=platform, **kwargs)
+        executor.session = session
+        executor.meta = session.meta
+        if restore_platform and executor.platform is not None:
+            session.restore(executor.platform)
+        return executor
+
+    def new_session(self, path: os.PathLike | None = None) -> Session:
+        """Record the following executions in a new session folder.
+
+        Args:
+            path: the new folder. If omitted, a fresh subfolder of the
+                session's reports folder (``QIBOCAL_REPORTS_DIR``) is used.
+
+        Raises:
+            TypeError: without ``path``, when no reports folder is set.
+        """
+        if path is None:
+            path = default_path()
+        if path is None:
+            raise TypeError(
+                "new_session() missing the output path: pass `path`, "
+                f"or set {REPORTS_DIR}"
+            )
+        if self.session is not None:
+            self.session.flush()
+        meta = None
+        if self.meta is not None:
+            meta = replace(self.meta, start_time=None, end_time=None, stats={})
+        self.session = Session(path, meta)
+        self.path = self.session.path
+        self.meta = meta
+        return self.session
+
+    def _record(self, completed: QibocalCompleted) -> QibocalCompleted:
+        """Record a step output in the session, if any."""
+        if self.session is None:
+            return completed
+        return self.session.ensure(self, completed)
+
     def _chain(self, step: str, *args, **kwargs) -> Any:
         """Run a step through the middleware, down to the runner."""
         call = partial(getattr(self.runner, step), self)
@@ -146,28 +230,41 @@ class Executor(QibocalExecutor):
         return result
 
     def _init(self, force: bool = False):
-        self._chain("open", force)
+        if self.session is not None:
+            self.session.start(self, force)
+            self.meta = self.session.meta
+        self._chain("open")
 
     def close(self):
         self._chain("close")
+        if self.session is not None:
+            self.session.flush()
 
     def acquire(self, bound: BoundProtocol, **kwargs: Any) -> Completed:
-        return self._finish(self._chain("acquire", bound, **kwargs))
+        completed = self._chain("acquire", bound, **kwargs)
+        return self._finish(self._record(completed))
 
     def fit(
         self, completed: QibocalCompleted, *, targets: Targets | None = None
     ) -> Completed:
-        return self._finish(self._chain("fit", completed, targets=targets))
+        fitted = self._record(self._chain("fit", completed, targets=targets))
+        if self.session is not None:
+            self.session.results(fitted)
+        return self._finish(fitted)
 
     def report(
         self, completed: QibocalCompleted, *, targets: Targets | None = None
     ) -> Completed:
-        return self._finish(self._chain("report", completed, targets=targets))
+        reported = self._chain("report", completed, targets=targets)
+        return self._finish(self._record(reported))
 
     def update(
         self, completed: QibocalCompleted, *, targets: Targets | None = None
     ) -> Completed:
-        return self._finish(self._chain("update", completed, targets=targets))
+        updated = self._record(self._chain("update", completed, targets=targets))
+        if self.session is not None:
+            self.session.platform(self.platform)
+        return self._finish(updated)
 
     def load(self, path: Any) -> Completed:
         """Load a previously dumped execution, transformed and displayed."""

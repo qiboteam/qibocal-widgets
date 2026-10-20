@@ -23,13 +23,23 @@ __all__ = ["Local", "Runner"]
 class Runner:
     """Base runner: every step runs locally, as in :class:`qibocal.Executor`."""
 
-    def open(self, executor: Executor, force: bool = False) -> None:
-        """Initialize the execution context (output folder, platform connection)."""
-        QibocalExecutor._init(executor, force)
+    def open(self, executor: Executor) -> None:
+        """Enter the execution context: connect the platform.
+
+        The output folder is managed by the executor's session, not by the
+        runner.
+        """
+        if executor.platform is not None:
+            executor.platform.connect()
 
     def close(self, executor: Executor) -> None:
-        """Finalize the execution context."""
-        QibocalExecutor.close(executor)
+        """Exit the execution context: disconnect the platform."""
+        if executor.platform is not None:
+            executor.platform.disconnect()
+
+    def platform_name(self, executor: Executor) -> str | None:
+        """Name of the platform the steps run on, if known."""
+        return executor.platform.name if executor.platform is not None else None
 
     def acquire(
         self, executor: Executor, bound: BoundProtocol, **kwargs: Any

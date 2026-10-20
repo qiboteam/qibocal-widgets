@@ -118,12 +118,36 @@ explicit `path` keeps its meaning; without either, `create` raises a
 `TypeError`. The default constructor is unchanged: without `create`, there is
 no metadata, hence no output. `reports_dir()` exposes the folder.
 
-**Known gap**: direct executions are not recorded in the output history.
-`History.push` requires `Completed.task`, which only runcard executions have,
-so a notebook's report folder holds the metadata and the platform, but no
-protocol entries yet. Recording direct executions (synthesizing tasks, dumping
-data and results under `data/<task id>`) is needed for them to appear in the
-dashboard, either upstream in Qibocal's executor or as a middleware here.
+### 5. Sessions (`_core.session`)
+
+Following [#4](https://github.com/qiboteam/qibocal-widgets/issues/4), an
+executor with an output path owns a `Session`, recording every execution in
+its folder, appended for as long as the instance lives. Qibocal's own folder
+management is bypassed on purpose, to keep Qibocal simple: its `_init` refuses
+existing folders, and its `close` rewrites `history.json` from the executions
+of the current instance only, so it cannot append. The runner's `open`/`close`
+only connect and disconnect the platform.
+
+- The folder keeps the layout of runcard outputs (`data/<id>-<iteration>/`
+  with `action.yml`, data and results files; `history.json`; `meta.json`;
+  `platform/` and `new_platform/`), so `Output.load`, `Completed.load`, and
+  qibocal-report read it unchanged. The id is the registered protocol name.
+- Every change is written immediately: notebooks rarely close their
+  executor.
+- Acquisitions create task folders; fits write results in the folder of the
+  acquisition (overwriting when re-fitting); executions from elsewhere are
+  recorded as new tasks; updates dump the platform.
+- The folder is created at the first context entry or recording, so remote
+  executions, which never enter the context, are recorded too.
+- Protocols not registered in `qibocal.protocols` are recorded in `data/`,
+  but kept out of `history.json`: Qibocal cannot load them, and listing them
+  would break loading the whole folder.
+- `new_session()` switches to a new folder; `Executor.attach(path)` (or an
+  explicit `Session.attach`) continues an existing one, restoring the latest
+  recorded platform state.
+
+Follow-ups: recording the platform state of remote runners without a local
+platform (`Remote.state`) in `new_platform/`, and notes.
 
 ## Alternatives considered
 

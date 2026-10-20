@@ -99,8 +99,59 @@ For custom layouts, the same content is available explicitly:
     show_data(reported)
     show_reports(reported)
 
+Sessions
+--------
+
+An executor with an output folder records every execution in it, as a
+*session*: create the executor once, at the beginning of the notebook, and
+all the protocols executed with it are appended to the same folder, for as long
+as the instance lives.
+
+.. code-block:: python
+
+    executor = Executor.create(platform="chip", path="var/session", frontends=[Marimo()])
+
+    with executor:
+        rabi = executor(protocols.rabi_amplitude(...))  # var/session/data/rabi_amplitude-0
+    with executor:
+        ramsey = executor(protocols.ramsey(...))  # var/session/data/ramsey-0
+
+The folder keeps the layout of Qibocal's runcard outputs, so that Qibocal and
+the report server of qibocal-report read it unchanged:
+
+- every acquisition gets its own ``data/<protocol>-<iteration>`` folder, with
+  its parameters, data, and, once fitted, results (re-fitting overwrites them);
+- executions coming from elsewhere (a plain Qibocal executor, a loaded folder)
+  are recorded as new tasks when passed through any step;
+- ``history.json`` and ``meta.json`` (with timings) are updated after every
+  step, and the platform is saved at the start (``platform/``) and after updates
+  (``new_platform/``).
+
+Protocols not registered in :mod:`qibocal.protocols` are recorded too, but
+kept out of ``history.json``, since Qibocal cannot load them back.
+
+To start over in a new folder, keeping the same executor:
+
+.. code-block:: python
+
+    executor.new_session("var/tomorrow")
+
+To continue an existing folder with a new executor (e.g. after restarting the
+kernel), attach to it: the platform is restored to the latest state recorded
+in the folder, so the calibration continues where it was left.
+
+.. code-block:: python
+
+    executor = Executor.attach("var/session", frontends=[Marimo()])
+
+Executors without a local platform (e.g. with a remote runner) attach through
+an explicit session: ``Executor(None, session=Session.attach(path), ...)``.
+Creating an executor on an existing, non-empty folder raises
+:class:`~qibocal_widgets.SessionExists`, unless ``force`` (in
+``Executor.open``) replaces it.
+
 Output location
----------------
+~~~~~~~~~~~~~~~
 
 Notebook sessions started by the Qibocal application, or by ``qibocal notebook``
 from `qibocal-report <https://github.com/qiboteam/qibocal-report>`_, may have
@@ -108,8 +159,9 @@ a *reports folder*, exported as the ``QIBOCAL_REPORTS_DIR`` environment
 variable. Its report server serves that folder, so calibrations show up in the
 dashboard while the session goes on.
 
-Without an explicit ``path``, ``Executor.create`` and ``Executor.open`` write
-to a fresh subfolder of it, named ``<YYYY-MM-DD>_<HH-MM-SS>_<user>`` (UTC):
+Without an explicit ``path``, ``Executor.create``, ``Executor.open``, and
+``new_session`` use a fresh subfolder of it, named
+``<YYYY-MM-DD>_<HH-MM-SS>_<user>`` (UTC):
 
 .. code-block:: python
 
