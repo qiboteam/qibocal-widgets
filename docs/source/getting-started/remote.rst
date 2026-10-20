@@ -1,7 +1,7 @@
 Remote execution
 ================
 
-The :class:`~qibocal_widgets.remote.Remote` plugin runs the steps needing the
+The :class:`~qibocal_widgets.remote.Remote` runner executes the steps needing the
 instruments on the machine which has access to them, while the notebook runs
 elsewhere. It follows the multi-tier architecture of the `interactive usage
 <https://qibo.science/qibocal/stable/tutorials/interactive.html>`_ of Qibocal,
@@ -13,7 +13,9 @@ and the conventions of `qibocal-report <https://github.com/qiboteam/qibocal-repo
     from qibocal_widgets.marimo import Marimo
     from qibocal_widgets.remote import Remote
 
-    executor = Executor(None, targets=[0, 1], plugins=[Marimo(), Remote("lab")])
+    executor = Executor(
+        None, targets=[0, 1], runner=Remote("lab"), frontends=[Marimo()]
+    )
     completed = executor(bound)  # acquired remotely, fitted and reported locally
     completed
 
@@ -41,7 +43,7 @@ locally, from the acquired data. Updates only modify the platform parameters:
   access node), the update is applied to it, and its state is sent along with
   every following acquisition;
 - without (e.g. ``Executor(None, ...)`` on a laptop), the update runs remotely,
-  on the access node and outside of the queue, and the plugin keeps the
+  on the access node and outside of the queue, and the runner keeps the
   resulting state for the following acquisitions.
 
 Each job recreates the platform from its name and applies the current state,

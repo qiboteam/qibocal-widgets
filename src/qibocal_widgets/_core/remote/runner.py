@@ -1,4 +1,4 @@
-"""Remote execution plugin."""
+"""Remote execution runner."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from qibocal.auto.operation import BoundProtocol, Parameters
 from qibocal.auto.task import Completed
 
-from ..plugin import Next, Plugin
+from ..runner import Runner
 from . import jobs, transport
 from .config import CONNECTION_VARIABLE, Connection, load_connection
 
@@ -19,14 +19,14 @@ if TYPE_CHECKING:
 __all__ = ["Remote"]
 
 
-class Remote(Plugin):
+class Remote(Runner):
     """Execute the steps needing the instruments on another machine.
 
     Only the acquisition needs the instruments: it is dispatched according to
     the connection (see :class:`Connection`), while fit and report always run
     locally. The update runs locally when the executor has a platform, whose
     state is then sent along with every acquisition; otherwise it runs
-    remotely, on the access node, and the plugin keeps the resulting state.
+    remotely, on the access node, and the runner keeps the resulting state.
 
     When the connection dispatches nothing (the process already runs where
     the instruments are), every step passes through unchanged, so the same
@@ -37,12 +37,7 @@ class Remote(Plugin):
             :class:`Connection`. If omitted, the connection named by the
             ``QIBOCAL_WIDGETS_CONNECTION`` environment variable is used, or none.
         **options: :class:`Connection` fields, overriding the connection's.
-
-    Incompatible with any other plugin dispatching the steps (``dispatch``
-    group).
     """
-
-    exclusive = "dispatch"
 
     def __init__(self, connection: str | Connection | None = None, **options: Any):
         if connection is None:
@@ -96,22 +91,20 @@ class Remote(Plugin):
             return jobs.platform_state(executor.platform)
         return self.state
 
-    def open(self, executor: Executor, call_next: Next, *args, **kwargs):
+    def open(self, executor: Executor, force: bool = False) -> None:
         if not self.connection.dispatched:
-            return call_next(*args, **kwargs)
+            return super().open(executor, force)
         # the platform is connected remotely, by each acquisition
         return None
 
-    def close(self, executor: Executor, call_next: Next, *args, **kwargs):
+    def close(self, executor: Executor) -> None:
         if not self.connection.dispatched:
-            return call_next(*args, **kwargs)
+            return super().close(executor)
         return None
 
-    def acquire(
-        self, executor: Executor, call_next: Next, bound: BoundProtocol, **kwargs
-    ) -> Completed:
+    def acquire(self, executor: Executor, bound: BoundProtocol, **kwargs) -> Completed:
         if not self.connection.dispatched:
-            return call_next(bound, **kwargs)
+            return super().acquire(executor, bound, **kwargs)
         targets = kwargs.pop("targets", None)
         targets = executor.targets if targets is None else targets
         if targets is None:
@@ -134,13 +127,11 @@ class Remote(Plugin):
             data_time=outcome["data_time"],
         )
 
-    def update(
-        self, executor: Executor, call_next: Next, completed: Completed, **kwargs
-    ) -> Completed:
+    def update(self, executor: Executor, completed: Completed, **kwargs) -> Completed:
         if not self.connection.dispatched or executor.platform is not None:
             # updating only modifies the platform parameters, with no need
             # for the instruments: the new state travels with the next jobs
-            return call_next(completed, **kwargs)
+            return super().update(executor, completed, **kwargs)
         if completed.bound is None or completed.results is None:
             raise ValueError("Updating requires a fitted execution")
         targets = kwargs.get("targets")

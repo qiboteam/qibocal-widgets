@@ -16,8 +16,10 @@ Qibocal's `Executor` returns a `Completed` object from every phase
 Displaying its content in a notebook used to require wrapping it manually in
 dedicated helper functions.
 
-`qibocal-widgets` provides a drop-in executor, extended through plugins. With
-a frontend plugin, its outputs render themselves:
+`qibocal-widgets` provides a drop-in executor, composed of three roles:
+**frontends** displaying every output, a **runner** deciding where the steps
+run, and **middleware** wrapping every step. With a frontend, outputs render
+themselves:
 
 ```python
 from qibocal import protocols
@@ -26,7 +28,7 @@ from qibocal_widgets import Executor
 from qibocal_widgets.marimo import Marimo  # or: qibocal_widgets.jupyter.Jupyter
 
 executor = Executor.create(
-    platform=platform, path="var/report", update=False, plugins=[Marimo()]
+    platform=platform, path="var/report", update=False, frontends=[Marimo()]
 )
 bound = protocols.ramsey(delay=(10, 1000, 100))
 
@@ -41,8 +43,8 @@ reported  # two tabs: raw data and per-target reports (plots + fit table)
 
 Every phase returns a `qibocal_widgets.Completed`: a subclass of Qibocal's
 `Completed` carrying exactly the same attributes (`data`, `results`,
-`reports`, `targets`, ...) plus the views registered by plugins. The Marimo and
-Jupyter plugins can be registered together. Explicit helpers remain available
+`reports`, `targets`, ...) plus the views registered by frontends. The Marimo and
+Jupyter frontends can be registered together. Explicit helpers remain available
 when finer control is needed:
 
 ```python
@@ -54,15 +56,20 @@ show_reports(completed)
 
 Executions produced by a plain `qibocal.Executor` (or loaded from disk) can be
 made displayable with `wrap(completed)`, or simply by passing them through any
-phase of an executor with the plugin.
+phase of an executor with the frontend.
 
-The `Remote` plugin (`qibocal_widgets.remote`) dispatches the acquisition to
+The `Remote` runner (`qibocal_widgets.remote`) dispatches the acquisition to
 the machine with the instruments, through SLURM and SSH, while fit and report
-run locally; named connections are shared with qibocal-report.
+run locally; named connections are shared with qibocal-report:
 
-Plugins work like web-server middleware: each one wraps the executor steps
+```python
+executor = Executor(None, targets=[0, 1], runner=Remote("lab"), frontends=[Marimo()])
+```
+
+Middleware work like in web servers: each one wraps the executor steps
 (`acquire`, `fit`, `report`, `update`, and the context lifecycle), and may
-post-process every output. See the documentation to write your own.
+post-process every output. See the documentation to write your own frontends,
+runners, and middleware.
 
 ## Installation
 
@@ -80,21 +87,23 @@ qibocal = { git = "https://github.com/qiboteam/qibocal.git", branch = "protodev"
 
 ## Layout
 
-The public interface is made of three modules, which only re-export objects
+The public interface is made of four modules, which only re-export objects
 implemented in the private `qibocal_widgets._core` subpackage:
 
-- `qibocal_widgets`: `Executor`, `Plugin`, `Completed`, and the
+- `qibocal_widgets`: `Executor`, the base classes of its roles (`Frontend`,
+  `Runner` and its default `Local`, `Middleware`), `Completed`, and the
   frontend-agnostic building blocks (`data_frames`, `reports`, `Report`, ...).
-- `qibocal_widgets.marimo`: the `Marimo` plugin, `show_data`, `show_reports`,
+- `qibocal_widgets.marimo`: the `Marimo` frontend, `show_data`, `show_reports`,
   `wrap`.
-- `qibocal_widgets.jupyter`: the `Jupyter` plugin (rendering with
+- `qibocal_widgets.jupyter`: the `Jupyter` frontend (rendering with
   `ipywidgets`), `show_data`, `show_reports`, `wrap`.
-- `qibocal_widgets.remote`: the `Remote` plugin, and connections management.
+- `qibocal_widgets.remote`: the `Remote` runner, and connections management.
 
 Inside `_core`: `data` and `reports` (extraction, no frontend import),
-`layout` (shared display policy), `plugin` and `executor` (the plugin
-machinery), `marimo` and `jupyter` (rendering), `remote` (connections, job encoding,
-transport, and the self-contained remote worker).
+`layout` (shared display policy), `completed`, `frontend`, `runner`,
+`middleware` and `executor` (the executor and its roles), `marimo` and
+`jupyter` (rendering), `remote` (connections, job encoding, transport, and the
+self-contained remote worker).
 
 Other folders:
 

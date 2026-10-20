@@ -38,39 +38,50 @@ Pure data manipulation, no frontend import.
   callback returned (per-target `(figures, table)` tuples, a single figure, a
   list of figures, bare HTML) into a `Report(figures, table, extra)` object.
 
-### 2. Plugins (`_core.plugin`, `_core.executor`)
+### 2. Executor roles (`_core.executor`, `_core.runner`, `_core.middleware`, `_core.frontend`)
 
-`Executor(qibocal.Executor)` accepts `plugins=[...]` and routes every step
-through them, in the spirit of web-server middleware:
+`Executor(qibocal.Executor)` is composed of three roles, each matching a class
+of extensions with different semantics:
 
-- **around hooks**, one per step (`open`, `close`, `acquire`, `fit`,
-  `report`, `update`), receive the executor and the next callable. They are
-  chained in registration order, the first plugin being the outermost and
-  Qibocal's implementation the innermost. A hook can alter arguments,
-  post-process the output, or replace the step by not calling the next one.
-  `open`/`close` wrap `Executor._init`/`close`, so both `with executor:` and
-  the `Executor.open(...)` classmethod go through them.
-- the **result hook** transforms the output of every step, after the chain,
-  in registration order. Plugins which only decorate executions use it alone,
-  so their position does not matter.
+| Role | Cardinality | Order | Extensions |
+| --- | --- | --- | --- |
+| `runner` (`Runner`) | exactly one, default `Local` | innermost | remote/SLURM, async jobs, `submitit`, cancellation |
+| `middleware` (`Middleware`) | any | registration order, first outermost | timing, logging, caching, persistence, progress, history, background execution |
+| `frontends` (`Frontend`) | any | irrelevant | Marimo, Jupyter, HTML fallback, further tabs and renderers |
+
+- The **runner** does the actual work of every step. The base `Runner` calls
+  Qibocal's implementation for each step (`open`/`close` wrap
+  `Executor._init`/`close`, so both `with executor:` and the
+  `Executor.open(...)` classmethod go through it); a runner executing some
+  steps elsewhere overrides only those. Being a single slot, it needs no
+  conflict resolution, and runner-specific operations (`Remote.install()`)
+  have a natural home.
+- **Middleware** hooks, one per step, receive the executor and the next
+  callable, like web-server middleware: they can alter arguments,
+  post-process the output, or not call the next callable. The runner is always
+  the innermost layer, so every middleware sees every step regardless of
+  order. A `result` hook transforms the output of every step.
+- **Frontends** render executions for one display protocol. The executor
+  attaches all of them to every output, after the middleware result hooks;
+  `wrap(completed)` does the same without an executor. Frontends whose views
+  interact with the executor (e.g. a phase-control toolbar) receive it in
+  `attach`.
 
 `Executor.__call__` is inherited: it calls the overridden phases, so the full
-workflow goes through the plugins with no dedicated hook.
+workflow goes through all the roles with no dedicated hook. Objects given in
+the wrong role are rejected with a `TypeError`.
 
-Every output is converted (`convert`) to `qibocal_widgets.Completed`, a
-subclass of Qibocal's `Completed` with a `views` field: displayable views
-keyed by display protocol (`_display_` for Marimo, `_repr_mimebundle_` for
-Jupyter). Missing views fall back to the plain representation, so several
-frontends coexist on the same object. Conversion is idempotent and does not
-trigger lazy loading of data stored on disk; Qibocal's downstream phases use
-`dataclasses.replace`, which preserves the subclass and its views.
-
-Incompatibilities are declared, not implicit: plugins replacing the same step
-share an `exclusive` group, and the executor raises `PluginConflict` when two
-plugins of the same group are registered.
+Every output is converted (`convert`) to `qibocal_widgets.Completed`
+(`_core.completed`), a subclass of Qibocal's `Completed` with a `views` field:
+displayable views keyed by display protocol (`_display_` for Marimo,
+`_repr_mimebundle_` for Jupyter). Missing views fall back to the plain
+representation, so several frontends coexist on the same object. Conversion is
+idempotent and does not trigger lazy loading of data stored on disk; Qibocal's
+downstream phases use `dataclasses.replace`, which preserves the subclass and
+its views.
 
 All the constructors of `Executor` (`create`, `open`, the default one) are
-inherited, and forward `plugins`.
+inherited, and forward the role arguments.
 
 ### 3. Frontends (`_core.marimo`, `_core.jupyter`)
 
@@ -86,8 +97,8 @@ Each defines:
   figures).
 - `display(completed)`: data and reports in tabs, plus an error section when
   the execution failed. Sections that are not available are omitted.
-- the `Marimo` / `Jupyter` plugin, whose result hook registers `display` as
-  the view of its frontend's display protocol.
+- the `Marimo` / `Jupyter` frontend, rendering with `display` for its display
+  protocol.
 - `wrap(completed)`: the same, on a single execution.
 
 Marimo renders with `mo.ui.table`, `mo.ui.plotly`, `mo.Html`, `mo.accordion`,
@@ -102,8 +113,18 @@ inside the output widgets.
 The first implementation shipped `MarimoExecutor` and `JupyterExecutor`, and
 the remote execution proposal combined features through cooperative
 subclasses (`class MarimoRemoteExecutor(MarimoExecutor, RemoteExecutor)`).
-Rejected: every new feature multiplies the classes to provide, while plugins
-compose freely in a single list.
+Rejected: every new feature multiplies the classes to provide, while roles
+compose freely.
+
+### A single list of plugins (or middleware)
+
+The second implementation registered everything in one `plugins=[...]` list,
+with middleware-like hooks, and exclusivity groups to reject two plugins
+replacing the same step. Replaced by the three roles: dispatching is singular
+by nature, so it fits a slot rather than a list with conflict checks; placing
+it innermost removes the ordering pitfall of a dispatcher short-circuiting
+the plugins after it; and display needs no hooks at all. Plugin also suggested
+discovery and global registration, which none of these involve.
 
 ### Registering formatters instead of subclassing
 
@@ -124,7 +145,7 @@ It remains a cheap addition for Jupyter (an opt-in `register()` function), see
 
 `Widgets(executor)` forwarding attribute access and wrapping results. Rejected:
 `Executor.create`/`open` are classmethods and `with executor:` must keep
-working, so a single subclass hosting the plugins is both simpler and more
+working, so a single subclass hosting the roles is both simpler and more
 faithful. Composition would also break `isinstance(..., Executor)` checks.
 
 ### Monkeypatching `Completed` with display protocol methods

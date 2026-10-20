@@ -13,9 +13,9 @@ from IPython.display import display as ipy_display
 from qibocal.auto.task import Completed as QibocalCompleted
 
 from . import layout
+from .completed import MIMEBUNDLE, Completed
 from .data import data_frames
-from .executor import MIMEBUNDLE, Completed, Executor, convert
-from .plugin import Plugin
+from .frontend import Frontend
 from .reports import Report, reports, reports_of
 
 __all__ = [
@@ -138,17 +138,19 @@ def display(completed: QibocalCompleted) -> widgets.Widget:
     return tabs
 
 
-class Jupyter(Plugin):
-    """Display every execution in Jupyter, with :func:`display`.
+class Jupyter(Frontend):
+    """Display executions in Jupyter, with :func:`display`.
 
-    Compatible with :class:`~qibocal_widgets.marimo.Marimo`: each frontend
-    uses its own view.
+    Compatible with :class:`~qibocal_widgets.marimo.Marimo`: each
+    frontend uses its own view.
     """
 
-    def result(self, executor: Executor, completed: QibocalCompleted) -> Completed:
-        return wrap(completed)
+    protocol = MIMEBUNDLE
+
+    def render(self, completed: QibocalCompleted) -> Any:
+        return display(completed)
 
 
 def wrap(completed: QibocalCompleted) -> Completed:
     """Make any execution display itself in Jupyter."""
-    return convert(completed).with_view(MIMEBUNDLE, display)
+    return Jupyter().attach(completed)

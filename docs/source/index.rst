@@ -7,9 +7,9 @@ executor, for both `Marimo <https://marimo.io>`_ and
 
 Every phase of Qibocal's executor (``acquire``, ``fit``, ``report``,
 ``update``, or the full ``executor(bound)`` call) returns a ``Completed``
-object. ``qibocal-widgets`` provides a drop-in executor, extended through
-plugins: with a frontend plugin, its outputs display themselves in the
-notebook (raw data tables, per-target report figures and fit tables), with no
+object. ``qibocal-widgets`` provides a drop-in executor, composed of a
+runner, middleware, and frontends: with a frontend, its outputs display
+themselves in the notebook (raw data tables, per-target report figures and fit tables), with no
 helper call.
 
 .. code-block:: python
@@ -17,7 +17,7 @@ helper call.
     from qibocal_widgets import Executor
     from qibocal_widgets.marimo import Marimo
 
-    executor = Executor.create(platform=platform, path="var/report", plugins=[Marimo()])
+    executor = Executor.create(platform=platform, path="var/report", frontends=[Marimo()])
     with executor:
         completed = executor(bound, targets=[0, 1])
     completed  # renders raw data and reports

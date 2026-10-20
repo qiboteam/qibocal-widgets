@@ -1,34 +1,46 @@
 """Notebook integration for the Qibocal executor.
 
 :class:`Executor` is a drop-in replacement of :class:`qibocal.Executor`,
-extended through a list of plugins::
+composed of three roles:
+
+- a :class:`Runner`, deciding where and how the steps run (:class:`Local`
+  by default, or :class:`~qibocal_widgets.remote.Remote`);
+- :class:`Middleware`, wrapping every step;
+- :class:`Frontend` objects, displaying every output.
+
+::
 
     from qibocal_widgets import Executor
     from qibocal_widgets.marimo import Marimo
 
-    executor = Executor.create(platform="mock", path="var/report", plugins=[Marimo()])
+    executor = Executor.create(platform="mock", path="var/report", frontends=[Marimo()])
 
-Frontend plugins live in their own modules:
+Frontends live in their own modules:
 
 - :mod:`qibocal_widgets.marimo` (requires the ``marimo`` extra)
 - :mod:`qibocal_widgets.jupyter` (requires the ``jupyter`` extra)
 
 This module also exposes the frontend-agnostic building blocks, useful to
-write further plugins.
+write further runners, middleware, and frontends.
 """
 
+from ._core.completed import Completed, View, convert
 from ._core.data import data_frames
-from ._core.executor import Completed, Executor, View, convert
-from ._core.plugin import Plugin, PluginConflict
+from ._core.executor import Executor
+from ._core.frontend import Frontend
+from ._core.middleware import Middleware
 from ._core.reports import Report, reports, reports_of
+from ._core.runner import Local, Runner
 from ._core.version import __version__
 
 __all__ = [
     "Completed",
     "Executor",
-    "Plugin",
-    "PluginConflict",
+    "Frontend",
+    "Local",
+    "Middleware",
     "Report",
+    "Runner",
     "View",
     "__version__",
     "convert",

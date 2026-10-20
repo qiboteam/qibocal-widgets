@@ -31,7 +31,7 @@ summary this turns the cell output into a complete record of the experiment.
 
 ## 4. Widget-free HTML fallback (Jupyter)
 
-The `Jupyter` plugin currently needs `ipywidgets`. Provide a view returning a
+The `Jupyter` frontend currently needs `ipywidgets`. Provide a view returning a
 `text/html` bundle (pandas `to_html`, Plotly `to_html(full_html=
 False, include_plotlyjs="cdn")`, `<details>` elements as accordion) so that:
 
@@ -40,7 +40,7 @@ False, include_plotlyjs="cdn")`, `<details>` elements as accordion) so that:
 - the `jupyter` extra can drop the hard dependency on `ipywidgets` (kept as
   optional enhancement).
 
-A `Jupyter(widgets=False)` plugin option picks the renderer.
+A `Jupyter(widgets=False)` frontend option picks the renderer.
 
 ## 5. Opt-in formatter registration (Jupyter)
 

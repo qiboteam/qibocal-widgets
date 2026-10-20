@@ -18,7 +18,7 @@ from fake import DEFAULT_SCALE, fake
 from qibocal import create_calibration_platform, protocols
 from qibocal.auto.operation import Protocol
 
-from qibocal_widgets import Executor, PluginConflict
+from qibocal_widgets import Executor
 from qibocal_widgets._core.remote import jobs, transport, worker
 from qibocal_widgets.remote import (
     Connection,
@@ -252,16 +252,18 @@ def test_normalize():
     assert worker.normalize(pinned) == pinned + "\n"
 
 
-# -- plugin --------------------------------------------------------------------------
+# -- runner --------------------------------------------------------------------------
 
 
-def test_conflict():
-    with pytest.raises(PluginConflict, match="dispatch"):
-        Executor(None, plugins=[Remote(), Remote()])
+def test_role():
+    remote = Remote()
+    assert Executor(None, runner=remote).runner is remote
+    with pytest.raises(TypeError, match="Middleware"):
+        Executor(None, middleware=[remote])
 
 
 def test_passthrough(bound, cluster):
-    executor = Executor(None, targets=TARGETS, update=False, plugins=[Remote()])
+    executor = Executor(None, targets=TARGETS, update=False, runner=Remote())
     completed = executor(bound)
     assert completed.data.scale == {t: DEFAULT_SCALE for t in TARGETS}
     assert cluster() == []
@@ -271,7 +273,7 @@ def test_laptop_tier(bound, cluster, mock_frequency):
     remote = Remote(
         ssh="-J bastion me@login", queue="chip", slurm="--time=5", platform="mock"
     )
-    executor = Executor(None, targets=TARGETS, update=False, plugins=[remote])
+    executor = Executor(None, targets=TARGETS, update=False, runner=remote)
     with executor:  # no local platform to connect
         completed = executor(bound)
 
@@ -302,7 +304,7 @@ def test_laptop_tier(bound, cluster, mock_frequency):
 def test_remote_update_state(bound, cluster, mock_frequency):
     """Without a local platform, updates run remotely and the state travels."""
     remote = Remote(ssh="me@login", queue="chip", platform="mock")
-    executor = Executor(None, targets=TARGETS[:1], update=True, plugins=[remote])
+    executor = Executor(None, targets=TARGETS[:1], update=True, runner=remote)
     completed = executor(bound)
     assert completed.data.scale == {0: mock_frequency[0]}
 
@@ -323,7 +325,7 @@ def test_access_tier_local_update(bound, cluster, mock_frequency, monkeypatch):
     monkeypatch.setenv("QIBOLAB_PLATFORMS", str(PLATFORMS))
     platform = create_calibration_platform("mock")
     executor = Executor(
-        platform, targets=TARGETS[:1], update=True, plugins=[Remote(queue="chip")]
+        platform, targets=TARGETS[:1], update=True, runner=Remote(queue="chip")
     )
     completed = executor(bound)
     peak = completed.results.peak[0]
@@ -339,7 +341,7 @@ def test_builtin_protocol(cluster):
         None,
         targets=TARGETS,
         update=False,
-        plugins=[Remote(queue="chip", platform="mock")],
+        runner=Remote(queue="chip", platform="mock"),
     )
     bound = protocols.ramsey_signal(
         delay_between_pulses_start=10,
@@ -359,7 +361,7 @@ def test_missing_environment(bound, cluster):
     executor = Executor(
         None,
         targets=TARGETS,
-        plugins=[Remote(queue="chip", platform="mock", venv="missing")],
+        runner=Remote(queue="chip", platform="mock", venv="missing"),
     )
     with pytest.raises(RemoteError, match="Environment not found"):
         executor.acquire(bound)
@@ -368,7 +370,7 @@ def test_missing_environment(bound, cluster):
 def test_protocol_unavailable_remotely(bound, cluster, monkeypatch):
     monkeypatch.delenv("PYTHONPATH")
     executor = Executor(
-        None, targets=TARGETS, plugins=[Remote(queue="chip", platform="mock")]
+        None, targets=TARGETS, runner=Remote(queue="chip", platform="mock")
     )
     with pytest.raises(RemoteError, match="ModuleNotFoundError") as error:
         executor.acquire(bound)
@@ -377,7 +379,7 @@ def test_protocol_unavailable_remotely(bound, cluster, monkeypatch):
 
 def test_unreachable(bound, cluster):
     executor = Executor(
-        None, targets=TARGETS, plugins=[Remote(ssh="unreachable", platform="mock")]
+        None, targets=TARGETS, runner=Remote(ssh="unreachable", platform="mock")
     )
     with pytest.raises(RemoteError, match="code 255") as error:
         executor.acquire(bound)
@@ -389,7 +391,7 @@ def test_timeout(bound, cluster, monkeypatch):
     executor = Executor(
         None,
         targets=TARGETS,
-        plugins=[Remote(queue="chip", platform="mock", timeout=0.5)],
+        runner=Remote(queue="chip", platform="mock", timeout=0.5),
     )
     with pytest.raises(RemoteError, match="timed out"):
         executor.acquire(bound)

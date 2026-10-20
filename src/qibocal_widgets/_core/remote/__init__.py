@@ -4,5 +4,5 @@
 - :mod:`.jobs`: JSON and NPZ encoding of jobs, client side.
 - :mod:`.transport`: ``ssh``/``srun`` command lines and job exchange.
 - :mod:`.worker`: self-contained worker, executed remotely.
-- :mod:`.plugin`: the :class:`~qibocal_widgets.remote.Remote` plugin.
+- :mod:`.runner`: the :class:`~qibocal_widgets.remote.Remote` runner.
 """

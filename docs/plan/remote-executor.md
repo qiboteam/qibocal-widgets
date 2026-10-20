@@ -7,10 +7,10 @@ User documentation: `docs/source/getting-started/remote.rst`.
 
 ## Decisions
 
-- **A plugin, not an executor subclass**: `Remote` is registered on the
-  general-purpose `Executor`, next to the frontend plugins, instead of
-  multiplying classes (see [architecture.md](architecture.md)). It belongs to
-  the `dispatch` exclusivity group.
+- **A runner, not an executor subclass**: `Remote` fills the single `runner`
+  role of the general-purpose `Executor`, next to its frontends and
+  middleware, instead of multiplying classes (see
+  [architecture.md](architecture.md)).
 - **Cut at the executor level**: on the remote side, a plain
   `qibocal.Executor` runs the step, the most tested path of Qibocal.
 - **Multi-tier, as in the interactive architecture of Qibocal and in
@@ -25,7 +25,7 @@ User documentation: `docs/source/getting-started/remote.rst`.
 - **Further protocols through environment management**, as qibocal-report
   does for notebooks: requirements in `requirements.txt` format, installed
   separately (`Remote.install()`) from execution.
-- **Connections configurable on the plugin or by name**, in a file shared with
+- **Connections configurable on the runner or by name**, in a file shared with
   qibocal-report, to be editable from its launcher
   ([qibocal-report#53](https://github.com/qiboteam/qibocal-report/issues/53)).
 
@@ -49,7 +49,7 @@ Jobs are independent: each one recreates the platform by name, then applies
 the current `parameters` and `calibration` JSON. The state comes from the
 local platform when the executor has one (updates are applied to it locally),
 otherwise from the state returned by the last remote update, kept by the
-plugin. Verified: a changed drive frequency reaches a freshly created
+runner. Verified: a changed drive frequency reaches a freshly created
 platform, which still connects.
 
 ### Wire protocol

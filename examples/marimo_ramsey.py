@@ -24,7 +24,7 @@ def _():
     mo.md("""
     # Qibocal executions, displayed implicitly
 
-    With the `Marimo` plugin, every phase of the executor returns an
+    With the `Marimo` frontend, every phase of the executor returns an
     execution which renders itself when it is the last expression of a cell.
     """)
     return
@@ -36,7 +36,7 @@ def _():
     if path.exists():
         shutil.rmtree(path)
     executor = Executor.create(
-        path=path, platform=PLATFORM, update=False, plugins=[Marimo()]
+        path=path, platform=PLATFORM, update=False, frontends=[Marimo()]
     )
     return (executor,)
 

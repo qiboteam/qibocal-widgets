@@ -1,6 +1,6 @@
 """Remote execution.
 
-The :class:`Remote` plugin dispatches the acquisition to the machine with
+The :class:`Remote` runner dispatches the acquisition to the machine with
 access to the instruments, according to a :class:`Connection`::
 
     from qibocal_widgets import Executor
@@ -9,7 +9,7 @@ access to the instruments, according to a :class:`Connection`::
 
     remote = Remote("lab")  # named connection, from the configuration file
     remote.install()  # once, or whenever the requirements change
-    executor = Executor(None, targets=[0, 1], plugins=[Marimo(), remote])
+    executor = Executor(None, targets=[0, 1], runner=remote, frontends=[Marimo()])
     executor(bound)  # acquired remotely, fitted and reported locally
 
 Connections are stored in ``remotes.json``, in the configuration directory
@@ -26,7 +26,7 @@ from ._core.remote.config import (
     remove_connection,
     save_connection,
 )
-from ._core.remote.plugin import Remote
+from ._core.remote.runner import Remote
 from ._core.remote.transport import RemoteError
 
 __all__ = [

@@ -8,9 +8,9 @@ import marimo as mo
 from qibocal.auto.task import Completed as QibocalCompleted
 
 from . import layout
+from .completed import MARIMO, Completed
 from .data import data_frames
-from .executor import MARIMO, Completed, Executor, convert
-from .plugin import Plugin
+from .frontend import Frontend
 from .reports import Report, reports, reports_of
 
 __all__ = [
@@ -96,17 +96,19 @@ def display(completed: QibocalCompleted) -> mo.Html:
     return mo.ui.tabs(sections, value=layout.initial_section(sections))
 
 
-class Marimo(Plugin):
-    """Display every execution in Marimo, with :func:`display`.
+class Marimo(Frontend):
+    """Display executions in Marimo, with :func:`display`.
 
-    Compatible with :class:`~qibocal_widgets.jupyter.Jupyter`: each frontend
-    uses its own view.
+    Compatible with :class:`~qibocal_widgets.jupyter.Jupyter`: each
+    frontend uses its own view.
     """
 
-    def result(self, executor: Executor, completed: QibocalCompleted) -> Completed:
-        return wrap(completed)
+    protocol = MARIMO
+
+    def render(self, completed: QibocalCompleted) -> Any:
+        return display(completed)
 
 
 def wrap(completed: QibocalCompleted) -> Completed:
     """Make any execution display itself in Marimo."""
-    return convert(completed).with_view(MARIMO, display)
+    return Marimo().attach(completed)

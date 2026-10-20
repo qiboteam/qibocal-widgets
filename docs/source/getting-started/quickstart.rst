@@ -2,26 +2,35 @@ Quickstart
 ==========
 
 :class:`qibocal_widgets.Executor` is a drop-in replacement of
-:class:`qibocal.Executor`, extended by a list of plugins. Each notebook
-frontend is a plugin, in its own module:
+:class:`qibocal.Executor`, composed of three roles:
+
+- **frontends**, displaying every output in a notebook (any number, all
+  coexisting);
+- a **runner**, deciding where and how the steps run (exactly one: locally by
+  default, or remotely, see :doc:`remote`);
+- **middleware**, wrapping every step for anything else (timing, logging,
+  caching, ...).
+
+Each notebook frontend lives in its own module:
 
 =============  ===============================  ===============================
                Marimo                           Jupyter
 =============  ===============================  ===============================
 module         :mod:`qibocal_widgets.marimo`    :mod:`qibocal_widgets.jupyter`
-plugin         ``Marimo``                       ``Jupyter``
+frontend       ``Marimo``                       ``Jupyter``
 =============  ===============================  ===============================
 
 The examples below use Marimo; replace ``marimo`` with ``jupyter`` and
-``Marimo`` with ``Jupyter`` for the other frontend. Both plugins can also be
-registered together: each frontend uses its own view.
+``Marimo`` with ``Jupyter`` for the other frontend. Both can also be
+registered together: each uses its own view.
 
 Implicit display
 ----------------
 
 Create the executor exactly as a :class:`qibocal.Executor`: all its
 constructors (``create``, ``open``, and the default one) and the context
-manager are inherited, and additionally accept the ``plugins`` argument.
+manager are inherited, and additionally accept the ``frontends``,
+``runner``, and ``middleware`` arguments.
 
 .. code-block:: python
 
@@ -31,7 +40,7 @@ manager are inherited, and additionally accept the ``plugins`` argument.
     from qibocal_widgets.marimo import Marimo
 
     executor = Executor.create(
-        platform="mock", path="var/report", update=False, plugins=[Marimo()]
+        platform="mock", path="var/report", update=False, frontends=[Marimo()]
     )
     bound = protocols.ramsey_signal(
         delay_between_pulses_start=10,
@@ -103,7 +112,7 @@ can be made displayable with ``wrap``:
     wrap(completed)
 
 They are also converted automatically when passed through any phase of an
-executor with the plugin, e.g. ``executor.fit(completed)``.
+executor with the frontend, e.g. ``executor.fit(completed)``.
 
 Examples
 --------
@@ -112,34 +121,51 @@ Complete notebooks are available in the
 `examples <https://github.com/qiboteam/qibocal-widgets/tree/main/examples>`_
 folder of the repository.
 
-Writing plugins
----------------
+Extending the executor
+----------------------
 
-A plugin subclasses :class:`qibocal_widgets.Plugin` and overrides only the
-hooks it needs:
+Each role has a base class to subclass, overriding only what is needed.
 
-- *around hooks* (``open``, ``close``, ``acquire``, ``fit``, ``report``,
-  ``update``) receive the executor and the next callable of the chain, like
-  web-server middleware. The first registered plugin is the outermost. A hook
-  can alter the arguments, post-process the output, or replace the step by
-  not calling the next callable.
-- the *result hook* (``result``) transforms the output of every step, after
-  the whole chain, in registration order.
+**Frontends** (:class:`qibocal_widgets.Frontend`) set the display
+``protocol`` they implement, and ``render`` executions:
+
+.. code-block:: python
+
+    from qibocal_widgets import Frontend
+
+
+    class Summary(Frontend):
+        protocol = "_display_"  # Marimo's display protocol
+
+        def render(self, completed):
+            return f"{len(completed.targets)} targets, fitted: {completed.results is not None}"
+
+The executor attaches all its frontends to every output, after the
+middleware.
+
+**Runners** (:class:`qibocal_widgets.Runner`) run each step. The base class
+runs every step locally, as :class:`qibocal.Executor` does; a runner executing
+some steps elsewhere overrides only those, as
+:class:`~qibocal_widgets.remote.Remote` does for the acquisition.
+
+**Middleware** (:class:`qibocal_widgets.Middleware`) wrap the steps, like in
+web servers: each hook (``open``, ``close``, ``acquire``, ``fit``,
+``report``, ``update``) receives the executor and the next callable of the
+chain. The first middleware is the outermost, and the runner always the
+innermost, so every middleware sees every step. A hook can alter the
+arguments, post-process the output, or not call the next one at all. The
+``result`` hook transforms the output of every step.
 
 .. code-block:: python
 
     import time
 
-    from qibocal_widgets import Plugin
+    from qibocal_widgets import Middleware
 
 
-    class Timer(Plugin):
+    class Timer(Middleware):
         def acquire(self, executor, call_next, *args, **kwargs):
             start = time.perf_counter()
             completed = call_next(*args, **kwargs)
             print(f"acquired in {time.perf_counter() - start:.1f} s")
             return completed
-
-Plugins replacing the same step declare a common ``exclusive`` group: the
-executor refuses to register two plugins of the same group, raising
-:class:`qibocal_widgets.PluginConflict`.

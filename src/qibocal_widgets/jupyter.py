@@ -5,7 +5,7 @@ Usage, inside a Jupyter notebook::
     from qibocal_widgets import Executor
     from qibocal_widgets.jupyter import Jupyter
 
-    executor = Executor.create(platform=platform, path="var/report", plugins=[Jupyter()])
+    executor = Executor.create(platform=platform, path="var/report", frontends=[Jupyter()])
     with executor:
         acquired = executor.acquire(bound, targets=[0, 1])
     acquired  # rendered: raw data tables

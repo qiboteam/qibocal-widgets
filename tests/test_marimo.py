@@ -29,7 +29,7 @@ def render(obj) -> str:
 
 @pytest.fixture
 def widget_executor():
-    return Executor(None, targets=TARGETS, update=False, plugins=[Marimo()])
+    return Executor(None, targets=TARGETS, update=False, frontends=[Marimo()])
 
 
 def test_executor_attaches_marimo_view(widget_executor, bound):

@@ -21,7 +21,7 @@ def titles(container) -> list[str]:
 
 @pytest.fixture
 def widget_executor():
-    return Executor(None, targets=TARGETS, update=False, plugins=[Jupyter()])
+    return Executor(None, targets=TARGETS, update=False, frontends=[Jupyter()])
 
 
 def test_executor_attaches_jupyter_view(widget_executor, bound):

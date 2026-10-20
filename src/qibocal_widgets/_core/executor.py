@@ -1,153 +1,116 @@
-"""General-purpose executor, extended through plugins.
+"""General-purpose executor, composed of a runner, middleware, and frontends.
 
-:class:`Executor` is a drop-in replacement of :class:`qibocal.Executor`
-accepting a list of :class:`~qibocal_widgets.Plugin`. Every step is routed
-through the plugins' hooks, and every output is returned as a
-:class:`Completed`, which plugins may decorate with views for notebook
-frontends.
+:class:`Executor` is a drop-in replacement of :class:`qibocal.Executor`.
+Every step goes through:
+
+1. the middleware, in registration order (the first is the outermost);
+2. the runner, which does the actual work (locally by default);
+
+and every output is returned as a :class:`Completed`, transformed by the
+middleware result hooks and displayed by all the frontends.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field, fields, replace
+from collections.abc import Iterable
 from functools import partial
-from typing import Any, TypeVar
+from typing import Any
 
 from qibocal import Executor as QibocalExecutor
 from qibocal.auto.operation import BoundProtocol
 from qibocal.auto.task import Completed as QibocalCompleted
 from qibocal.auto.task import Targets
 
-from .plugin import Plugin, check_conflicts
+from .completed import Completed, convert
+from .frontend import Frontend
+from .middleware import Middleware
+from .runner import Local, Runner
 
-__all__ = ["Completed", "Executor", "View", "convert"]
-
-View = Callable[["Completed"], Any]
-"""Produce a displayable object from an execution."""
-
-MARIMO = "_display_"
-"""View key of the Marimo display protocol."""
-MIMEBUNDLE = "_repr_mimebundle_"
-"""View key of the IPython (Jupyter) display protocol."""
-
-_CompletedT = TypeVar("_CompletedT", bound=QibocalCompleted)
+__all__ = ["Executor"]
 
 
-@dataclass
-class Completed(QibocalCompleted):
-    """Execution carrying views for notebook frontends.
-
-    Views are keyed by the display protocol they implement. Without a view
-    for a protocol, the execution falls back to its plain representation, so
-    views for several frontends can coexist on the same object.
-    """
-
-    views: dict[str, View] = field(default_factory=dict, repr=False, compare=False)
-    """Views registered by plugins, keyed by display protocol."""
-
-    def _display_(self) -> Any:
-        """Marimo display protocol."""
-        view = self.views.get(MARIMO)
-        return view(self) if view is not None else repr(self)
-
-    def _repr_mimebundle_(self, include=None, exclude=None) -> dict | None:
-        """IPython display protocol."""
-        view = self.views.get(MIMEBUNDLE)
-        if view is None:
-            return None
-        return view(self)._repr_mimebundle_(include=include, exclude=exclude)
-
-    def with_view(self, key: str, view: View) -> Completed:
-        """A copy of the execution, with an additional view."""
-        return replace(self, views={**self.views, key: view})
-
-
-def convert(
-    completed: QibocalCompleted, completed_type: type[_CompletedT] = Completed
-) -> _CompletedT:
-    """Re-wrap an execution into another :class:`qibocal.auto.task.Completed`
-    subclass.
-
-    The operation is idempotent: instances already of the requested type are
-    returned unchanged. Lazily loaded attributes (data and results stored on
-    disk) are copied as they are, without triggering any loading.
-    """
-    if isinstance(completed, completed_type):
-        return completed
-    if not isinstance(completed, QibocalCompleted):
-        raise TypeError(f"Cannot convert {type(completed).__name__} to Completed")
-    names = {f.name for f in fields(completed_type)}
-    attributes = {
-        f.name: getattr(completed, f.name) for f in fields(completed) if f.name in names
-    }
-    return completed_type(**attributes)
+def _check(items: Iterable[Any], kind: type, role: str) -> list:
+    items = list(items)
+    for item in items:
+        if not isinstance(item, kind):
+            raise TypeError(f"{item!r} is not a {kind.__name__}, as {role} require")
+    return items
 
 
 class Executor(QibocalExecutor):
-    """Qibocal executor extended by plugins.
+    """Qibocal executor composed of a runner, middleware, and frontends.
 
     All the constructors of :class:`qibocal.Executor` (``create``, ``open``,
-    and the default one) are inherited, and additionally accept the
-    ``plugins`` keyword argument.
+    and the default one) are inherited, and accept the same additional
+    keyword arguments.
 
     Args:
         platform: as in :class:`qibocal.Executor`.
-        plugins: plugins applied to every step, the first being the outermost
-            for around hooks.
+        runner: where and how the steps run. Defaults to :class:`Local`.
+        middleware: wrapping every step, the first being the outermost.
+        frontends: displaying every output.
         **kwargs: forwarded to :class:`qibocal.Executor`.
 
     Raises:
-        PluginConflict: if two plugins share an exclusivity group.
+        TypeError: for objects given in the wrong role.
     """
 
-    def __init__(self, platform, *, plugins: Iterable[Plugin] = (), **kwargs: Any):
+    def __init__(
+        self,
+        platform,
+        *,
+        runner: Runner | None = None,
+        middleware: Iterable[Middleware] = (),
+        frontends: Iterable[Frontend] = (),
+        **kwargs: Any,
+    ):
         super().__init__(platform, **kwargs)
-        self.plugins: list[Plugin] = list(plugins)
-        check_conflicts(self.plugins)
+        self.runner: Runner = _check(
+            [runner if runner is not None else Local()], Runner, "runners"
+        )[0]
+        self.middleware: list[Middleware] = _check(middleware, Middleware, "middleware")
+        self.frontends: list[Frontend] = _check(frontends, Frontend, "frontends")
 
-    def _chain(self, step: str, core: Callable[..., Any], *args, **kwargs) -> Any:
-        """Run a step through the plugins' around hooks."""
-        call = core
-        for plugin in reversed(self.plugins):
-            call = partial(getattr(plugin, step), self, call)
+    def _chain(self, step: str, *args, **kwargs) -> Any:
+        """Run a step through the middleware, down to the runner."""
+        call = partial(getattr(self.runner, step), self)
+        for middleware in reversed(self.middleware):
+            call = partial(getattr(middleware, step), self, call)
         return call(*args, **kwargs)
 
     def _finish(self, completed: QibocalCompleted) -> Completed:
-        """Apply the plugins' result hooks to a step output."""
+        """Transform and display a step output."""
         result = convert(completed)
-        for plugin in self.plugins:
-            result = convert(plugin.result(self, result))
+        for middleware in self.middleware:
+            result = convert(middleware.result(self, result))
+        for frontend in self.frontends:
+            result = frontend.attach(result, self)
         return result
 
     def _init(self, force: bool = False):
-        self._chain("open", super()._init, force)
+        self._chain("open", force)
 
     def close(self):
-        self._chain("close", super().close)
+        self._chain("close")
 
     def acquire(self, bound: BoundProtocol, **kwargs: Any) -> Completed:
-        return self._finish(self._chain("acquire", super().acquire, bound, **kwargs))
+        return self._finish(self._chain("acquire", bound, **kwargs))
 
     def fit(
         self, completed: QibocalCompleted, *, targets: Targets | None = None
     ) -> Completed:
-        return self._finish(self._chain("fit", super().fit, completed, targets=targets))
+        return self._finish(self._chain("fit", completed, targets=targets))
 
     def report(
         self, completed: QibocalCompleted, *, targets: Targets | None = None
     ) -> Completed:
-        return self._finish(
-            self._chain("report", super().report, completed, targets=targets)
-        )
+        return self._finish(self._chain("report", completed, targets=targets))
 
     def update(
         self, completed: QibocalCompleted, *, targets: Targets | None = None
     ) -> Completed:
-        return self._finish(
-            self._chain("update", super().update, completed, targets=targets)
-        )
+        return self._finish(self._chain("update", completed, targets=targets))
 
     def load(self, path: Any) -> Completed:
-        """Load a previously dumped execution, through the result hooks."""
+        """Load a previously dumped execution, transformed and displayed."""
         return self._finish(QibocalCompleted.load(path))
