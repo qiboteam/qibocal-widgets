@@ -106,6 +106,25 @@ Marimo renders with `mo.ui.table`, `mo.ui.plotly`, `mo.Html`, `mo.accordion`,
 `Tab`, `Output`) and lets pandas and Plotly use their native Jupyter renderers
 inside the output widgets.
 
+### 4. Output location (`_core.output`)
+
+Following [#2](https://github.com/qiboteam/qibocal-widgets/issues/2), the
+session's reports folder (`QIBOCAL_REPORTS_DIR`, exported by qibocal-report's
+notebook sessions) is the default parent of the output path of
+`Executor.create` and `Executor.open`: each executor writes to a fresh
+`<YYYY-MM-DD>_<HH-MM-SS>_<user>` subfolder (UTC, numeric suffix on
+collisions), recognized by the report server through its `meta.json`. An
+explicit `path` keeps its meaning; without either, `create` raises a
+`TypeError`. The default constructor is unchanged: without `create`, there is
+no metadata, hence no output. `reports_dir()` exposes the folder.
+
+**Known gap**: direct executions are not recorded in the output history.
+`History.push` requires `Completed.task`, which only runcard executions have,
+so a notebook's report folder holds the metadata and the platform, but no
+protocol entries yet. Recording direct executions (synthesizing tasks, dumping
+data and results under `data/<task id>`) is needed for them to appear in the
+dashboard, either upstream in Qibocal's executor or as a middleware here.
+
 ## Alternatives considered
 
 ### One executor subclass per feature, combined by inheritance

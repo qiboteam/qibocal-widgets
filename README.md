@@ -66,6 +66,11 @@ run locally; named connections are shared with qibocal-report:
 executor = Executor(None, targets=[0, 1], runner=Remote("lab"), frontends=[Marimo()])
 ```
 
+In notebook sessions with a reports folder (`QIBOCAL_REPORTS_DIR`, set by
+qibocal-report), `Executor.create` and `Executor.open` default to a fresh
+subfolder of it, so calibrations show up in its report dashboard;
+`reports_dir()` returns the folder.
+
 Middleware work like in web servers: each one wraps the executor steps
 (`acquire`, `fit`, `report`, `update`, and the context lifecycle), and may
 post-process every output. See the documentation to write your own frontends,

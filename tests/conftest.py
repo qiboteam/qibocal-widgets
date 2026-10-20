@@ -1,11 +1,15 @@
 """Shared fixtures, around the fake protocol of :mod:`fake`."""
 
+from pathlib import Path
+
 import pytest
 from fake import NPOINTS, fake
 from qibocal import Executor
 from qibocal.auto.operation import Protocol
 
 TARGETS = [0, 1]
+PLATFORMS = Path(__file__).parent / "platforms"
+"""Vendored Qibocal platforms (``mock``)."""
 
 
 @pytest.fixture(autouse=True)
@@ -15,6 +19,7 @@ def isolated_config(tmp_path_factory, monkeypatch):
         "QIBOCAL_REPORT_CONFIG_DIR", str(tmp_path_factory.mktemp("config"))
     )
     monkeypatch.delenv("QIBOCAL_WIDGETS_CONNECTION", raising=False)
+    monkeypatch.delenv("QIBOCAL_REPORTS_DIR", raising=False)
 
 
 @pytest.fixture

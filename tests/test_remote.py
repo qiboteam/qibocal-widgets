@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import TARGETS
+from conftest import PLATFORMS, TARGETS
 from fake import DEFAULT_SCALE, fake
 from qibocal import create_calibration_platform, protocols
 from qibocal.auto.operation import Protocol
@@ -33,7 +33,6 @@ from qibocal_widgets.remote import (
 )
 
 TESTS = Path(__file__).parent
-PLATFORMS = TESTS / "platforms"
 
 
 def executable(path: Path, body: str) -> None:

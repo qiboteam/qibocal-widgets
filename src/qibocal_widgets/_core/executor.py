@@ -12,7 +12,9 @@ middleware result hooks and displayed by all the frontends.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import os
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from functools import partial
 from typing import Any
 
@@ -24,6 +26,7 @@ from qibocal.auto.task import Targets
 from .completed import Completed, convert
 from .frontend import Frontend
 from .middleware import Middleware
+from .output import REPORTS_DIR, default_path
 from .runner import Local, Runner
 
 __all__ = ["Executor"]
@@ -41,8 +44,10 @@ class Executor(QibocalExecutor):
     """Qibocal executor composed of a runner, middleware, and frontends.
 
     All the constructors of :class:`qibocal.Executor` (``create``, ``open``,
-    and the default one) are inherited, and accept the same additional
-    keyword arguments.
+    and the default one) are available, and accept the same additional
+    keyword arguments. ``create`` and ``open`` also default the output path to
+    a fresh folder of the session's reports folder, if any (see
+    :func:`~qibocal_widgets.reports_dir`).
 
     Args:
         platform: as in :class:`qibocal.Executor`.
@@ -70,6 +75,59 @@ class Executor(QibocalExecutor):
         )[0]
         self.middleware: list[Middleware] = _check(middleware, Middleware, "middleware")
         self.frontends: list[Frontend] = _check(frontends, Frontend, "frontends")
+
+    @classmethod
+    def create(
+        cls,
+        path: os.PathLike | None = None,
+        targets: Targets | None = None,
+        platform: Any = None,
+        **kwargs: Any,
+    ) -> Executor:
+        """Create an executor writing its output to ``path``.
+
+        Args:
+            path: the output folder. If omitted, a fresh subfolder of the
+                session's reports folder (``QIBOCAL_REPORTS_DIR``) is used.
+            targets: as in :meth:`qibocal.Executor.create`.
+            platform: as in :meth:`qibocal.Executor.create`.
+            **kwargs: as in the constructor.
+
+        Raises:
+            TypeError: without ``path``, when no reports folder is set.
+        """
+        if path is None:
+            path = default_path()
+        if path is None:
+            raise TypeError(
+                f"create() missing the output path: pass `path`, or set {REPORTS_DIR}"
+            )
+        return super().create(path, targets=targets, platform=platform, **kwargs)
+
+    @classmethod
+    @contextmanager
+    def open(
+        cls,
+        path: os.PathLike | None = None,
+        targets: Targets | None = None,
+        force: bool = False,
+        platform: Any = None,
+        update: bool | None = None,
+        **kwargs: Any,
+    ) -> Iterator[Executor]:
+        """Enter the execution context, as :meth:`qibocal.Executor.open`.
+
+        The output ``path`` defaults as in :meth:`create`.
+        """
+        with super().open(
+            path,
+            targets=targets,
+            force=force,
+            platform=platform,
+            update=update,
+            **kwargs,
+        ) as executor:
+            yield executor
 
     def _chain(self, step: str, *args, **kwargs) -> Any:
         """Run a step through the middleware, down to the runner."""

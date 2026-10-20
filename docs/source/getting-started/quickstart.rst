@@ -99,6 +99,38 @@ For custom layouts, the same content is available explicitly:
     show_data(reported)
     show_reports(reported)
 
+Output location
+---------------
+
+Notebook sessions started by the Qibocal application, or by ``qibocal notebook``
+from `qibocal-report <https://github.com/qiboteam/qibocal-report>`_, may have
+a *reports folder*, exported as the ``QIBOCAL_REPORTS_DIR`` environment
+variable. Its report server serves that folder, so calibrations show up in the
+dashboard while the session goes on.
+
+Without an explicit ``path``, ``Executor.create`` and ``Executor.open`` write
+to a fresh subfolder of it, named ``<YYYY-MM-DD>_<HH-MM-SS>_<user>`` (UTC):
+
+.. code-block:: python
+
+    executor = Executor.create(platform="chip", frontends=[Marimo()])
+    executor.path  # e.g. <reports folder>/2026-10-20_14-03-11_alice
+
+- An explicit ``path`` always wins, with its usual meaning (relative to the
+  working directory).
+- Without ``path`` and without a reports folder, ``create`` raises a
+  ``TypeError``, as before.
+- :func:`qibocal_widgets.reports_dir` returns the folder (or ``None``), to
+  build custom paths under it:
+
+  .. code-block:: python
+
+      from qibocal_widgets import reports_dir
+
+      executor = Executor.create(platform="chip", path=reports_dir() / "rabi-tuning")
+
+The variable can also be set by hand, e.g. for a plain ``jupyter lab``.
+
 Executions from other sources
 -----------------------------
 
