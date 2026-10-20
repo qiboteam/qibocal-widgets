@@ -103,11 +103,11 @@ timeouts, unreachable hosts, missing environments, and unavailable protocols.
 1. **Launcher integration** (qibocal-report#53): a "Remote execution" section
    editing `remotes.json`; the schema is meant to be shared, possibly moving
    the connection model to a common package.
-2. **Report server on the same channel** (as qibocal-report#50 does for
-   notebooks): persist remote outputs in the executor's output folder, so a
-   report server can serve them.
-3. **Persisting outputs**: today data are loaded into memory; dumping them
-   (and the platform state) in the executor's `path` would mirror local runs.
+2. ~~Report server on the same channel~~ and ~~persisting outputs~~: done
+   through sessions ([#4](https://github.com/qiboteam/qibocal-widgets/issues/4)):
+   remote executions are recorded in the executor's session folder (by
+   default under the reports folder served by qibocal-report, #2), platform
+   updates included.
 4. **Cancellation**: interrupting the kernel kills the local `ssh`/`srun`
    process; check that the remote job is reliably cancelled (process groups,
    or `scancel` by job name).

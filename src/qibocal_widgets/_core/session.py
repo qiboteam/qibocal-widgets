@@ -10,7 +10,8 @@ qibocal-report read it unchanged:
 - ``history.json``: the execution order;
 - ``meta.json``: metadata, with per-task timings;
 - ``platform/``: the platform at the session start, and ``new_platform/``
-  after updates.
+  after updates;
+- ``notes.json``: notes on the session, and on each execution in its folder.
 
 Every change is written immediately, so the folder is always consistent, even
 if the session is never explicitly closed (as is common in notebooks).
@@ -26,17 +27,19 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from qibocal.auto.history import HISTORY
+from qibocal.auto.notes import Note, dump_notes
 from qibocal.auto.output import (
     META,
     PLATFORM,
     UPDATED_PLATFORM,
     Metadata,
-    Output,
     TaskStats,
     Versions,
 )
 from qibocal.auto.task import Action, Completed, Task, TaskId
 
+from . import notes as _notes
+from . import platforms
 from .protocols import reference, registered_name
 from .remote.worker import parameters_document
 
@@ -47,10 +50,6 @@ __all__ = ["Session", "SessionExists"]
 
 DATA = "data"
 """Subfolder of the task folders."""
-PARAMETERS = "parameters.json"
-"""Platform parameters file, in platform dumps."""
-CALIBRATION = "calibration.json"
-"""Platform calibration file, in platform dumps."""
 
 
 class SessionExists(FileExistsError):
@@ -130,8 +129,9 @@ class Session:
         if self.meta is None:
             self.meta = _metadata(executor)
         self.meta.start()
-        if executor.platform is not None:
-            Output.update_platform(executor.platform, self.path)
+        state = executor.runner.platform_state(executor)
+        if state is not None:
+            platforms.write(state, self.path / PLATFORM)
         self.started = True
         self._dump()
 
@@ -141,21 +141,67 @@ class Session:
             self.meta.end()
             self._dump()
 
-    def restore(self, platform) -> None:
-        """Apply the latest platform state recorded in the folder."""
+    def platform_state(self) -> platforms.State | None:
+        """The latest platform state recorded in the folder, if any."""
         for name in (UPDATED_PLATFORM, PLATFORM):
-            folder = self.path / name
-            if (folder / PARAMETERS).is_file():
-                break
-        else:
-            return
-        platform.parameters = type(platform.parameters).model_validate_json(
-            (folder / PARAMETERS).read_text()
-        )
-        if (folder / CALIBRATION).is_file() and platform.calibration is not None:
-            platform.calibration = type(platform.calibration).model_validate_json(
-                (folder / CALIBRATION).read_text()
-            )
+            state = platforms.read(self.path / name)
+            if state is not None:
+                return state
+        return None
+
+    def restore(self, executor: Executor) -> None:
+        """Continue from the latest platform state recorded in the folder.
+
+        The state is handed to the executor's runner: applied to the local
+        platform, or kept by remote runners for their next jobs.
+        """
+        state = self.platform_state()
+        if state is not None:
+            executor.runner.restore_platform(executor, state)
+
+    # -- notes -----------------------------------------------------------------
+
+    def note(
+        self,
+        content: str,
+        completed: Completed | None = None,
+        *,
+        author: str | None = None,
+    ) -> Note:
+        """Add a note to the session, or to one of its executions.
+
+        Notes are appended to the ``notes.json`` of the session folder, or of
+        the execution folder, safely with respect to the report server, which
+        may add notes concurrently.
+
+        Args:
+            content: the note text.
+            completed: an execution recorded in this session.
+            author: defaults to the author of the session metadata.
+
+        Raises:
+            ValueError: if the session has not started, or the execution is not
+                recorded in it.
+        """
+        folder = self._notes_folder(completed)
+        if author is None and self.meta is not None:
+            author = self.meta.author
+        note = Note(content=content, author=author)
+        _notes.append(folder, note)
+        return note
+
+    def notes(self, completed: Completed | None = None) -> list[Note]:
+        """Notes of the session, or of one of its executions."""
+        return _notes.load(self._notes_folder(completed))
+
+    def _notes_folder(self, completed: Completed | None) -> Path:
+        if not self.started:
+            raise ValueError("The session has not started: no folder to annotate")
+        if completed is None:
+            return self.path
+        if not self.contains(completed):
+            raise ValueError("The execution is not recorded in this session")
+        return Path(completed.path)
 
     # -- recording -------------------------------------------------------------
 
@@ -212,6 +258,8 @@ class Session:
         )
         recorded.dump_data()
         recorded.dump_results()
+        if recorded.notes:
+            dump_notes(recorded.notes, folder)
         if name is not None:
             # only registered protocols can be loaded back by Qibocal
             self.order.append(str(task_id))
@@ -233,10 +281,11 @@ class Session:
         self._stats(completed)
         self._dump()
 
-    def platform(self, platform) -> None:
-        """Record the updated platform."""
-        if platform is not None and self.started:
-            Output.update_platform(platform, self.path)
+    def platform(self, executor: Executor) -> None:
+        """Record the updated platform state, as known by the runner."""
+        state = executor.runner.platform_state(executor)
+        if state is not None and self.started:
+            platforms.write(state, self.path / UPDATED_PLATFORM)
 
     # -- internals -------------------------------------------------------------
 

@@ -243,3 +243,74 @@ def test_frontends_on_recorded(tmp_path, ramsey):
         completed = executor(ramsey)
     assert "_display_" in completed.views
     assert completed.path.parent == executor.path / "data"
+
+
+def test_notes(tmp_path, ramsey):
+    from qibocal.auto.notes import load_notes
+
+    path = tmp_path / "session"
+    executor = Executor.create(path, platform="mock", targets=TARGETS, update=False)
+    session_note = executor.note("cooldown 3, fridge at 12 mK")
+    assert session_note.author == executor.meta.author
+    with executor:
+        completed = executor(ramsey)
+    executor.note("fringes look off", completed, author="alice")
+
+    assert [n.content for n in executor.session.notes()] == [
+        "cooldown 3, fridge at 12 mK"
+    ]
+    (note,) = executor.session.notes(completed)
+    assert (note.content, note.author) == ("fringes look off", "alice")
+    # Qibocal reads them back, as the report server does
+    assert [n.content for n in Output.load(path).notes] == [
+        "cooldown 3, fridge at 12 mK"
+    ]
+    assert load_notes(completed.path) == [note]
+
+
+def test_notes_errors(tmp_path, ramsey, acquired):
+    with pytest.raises(ValueError, match="no session"):
+        Executor(None).note("nowhere")
+    executor = Executor.create(tmp_path / "session", platform="mock", targets=TARGETS)
+    with pytest.raises(ValueError, match="not recorded"):
+        executor.note("foreign", acquired)
+    with pytest.raises(ValueError, match="not started"):
+        Session(tmp_path / "other").note("early")
+
+
+def test_notes_concurrent(tmp_path):
+    """Appends serialize through the lock shared with the report server."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from qibocal.auto.notes import Note
+
+    from qibocal_widgets._core import notes
+
+    folder = tmp_path / "folder"
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(lambda i: notes.append(folder, Note(content=f"{i}")), range(40)))
+    assert sorted(int(n.content) for n in notes.load(folder)) == list(range(40))
+    assert (folder / ".notes.lock").exists()
+    assert not list(folder.glob(".notes-*.json"))
+
+
+def test_foreign_notes_carried(tmp_path, ramsey):
+    from qibocal.auto.notes import Note
+
+    first = Executor.create(
+        tmp_path / "first", platform="mock", targets=TARGETS, update=False
+    )
+    with first:
+        acquired = first.acquire(ramsey)
+    first.note("noisy", acquired)
+    loaded = QibocalCompleted.load(acquired.path)
+    assert [n.content for n in loaded.notes] == ["noisy"]
+
+    second = Executor.create(tmp_path / "second", platform="mock", targets=TARGETS)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message=".*not a registered")
+        recorded = second.fit(loaded)
+    # recognized as the registered protocol, despite the copy made by loading
+    assert history(second.path) == ["ramsey_signal-0"]
+    assert [n.content for n in second.session.notes(recorded)] == ["noisy"]
+    assert isinstance(loaded.notes[0], Note)

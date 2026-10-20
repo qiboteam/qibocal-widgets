@@ -63,6 +63,9 @@ class Executor(QibocalExecutor):
         frontends: displaying every output.
         session: the session recording the executions. Defaults to a new
             session in ``path``, if given, and to none otherwise.
+        restore_platform: when given an existing session (see
+            :meth:`Session.attach`), continue from the latest platform state
+            recorded in its folder.
         **kwargs: forwarded to :class:`qibocal.Executor`.
 
     Raises:
@@ -77,6 +80,7 @@ class Executor(QibocalExecutor):
         middleware: Iterable[Middleware] = (),
         frontends: Iterable[Frontend] = (),
         session: Session | None = None,
+        restore_platform: bool = True,
         **kwargs: Any,
     ):
         if session is not None:
@@ -92,6 +96,8 @@ class Executor(QibocalExecutor):
         )[0]
         self.middleware: list[Middleware] = _check(middleware, Middleware, "middleware")
         self.frontends: list[Frontend] = _check(frontends, Frontend, "frontends")
+        if session is not None and session.started and restore_platform:
+            session.restore(self)
 
     @classmethod
     def create(
@@ -173,12 +179,14 @@ class Executor(QibocalExecutor):
         session = Session.attach(path)
         if platform is None:
             platform = session.meta.platform
-        executor = super().create(path, targets=targets, platform=platform, **kwargs)
-        executor.session = session
-        executor.meta = session.meta
-        if restore_platform and executor.platform is not None:
-            session.restore(executor.platform)
-        return executor
+        return super().create(
+            path,
+            targets=targets,
+            platform=platform,
+            session=session,
+            restore_platform=restore_platform,
+            **kwargs,
+        )
 
     def new_session(self, path: os.PathLike | None = None) -> Session:
         """Record the following executions in a new session folder.
@@ -206,6 +214,25 @@ class Executor(QibocalExecutor):
         self.path = self.session.path
         self.meta = meta
         return self.session
+
+    def note(
+        self,
+        content: str,
+        completed: QibocalCompleted | None = None,
+        *,
+        author: str | None = None,
+    ):
+        """Add a note to the session, or to one of its executions.
+
+        See :meth:`Session.note`.
+
+        Raises:
+            ValueError: if the executor has no session.
+        """
+        if self.session is None:
+            raise ValueError("The executor has no session: create it with a path")
+        self.session.start(self)
+        return self.session.note(content, completed, author=author)
 
     def _record(self, completed: QibocalCompleted) -> QibocalCompleted:
         """Record a step output in the session, if any."""
@@ -263,7 +290,7 @@ class Executor(QibocalExecutor):
     ) -> Completed:
         updated = self._record(self._chain("update", completed, targets=targets))
         if self.session is not None:
-            self.session.platform(self.platform)
+            self.session.platform(self)
         return self._finish(updated)
 
     def load(self, path: Any) -> Completed:

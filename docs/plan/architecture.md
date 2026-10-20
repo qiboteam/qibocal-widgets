@@ -146,8 +146,16 @@ only connect and disconnect the platform.
   explicit `Session.attach`) continues an existing one, restoring the latest
   recorded platform state.
 
-Follow-ups: recording the platform state of remote runners without a local
-platform (`Remote.state`) in `new_platform/`, and notes.
+- Platform states are obtained from, and restored through, the runner
+  (`Runner.platform_state`, `Runner.restore_platform`): a remote runner
+  without a local platform records the state it keeps (`Remote.state`) after
+  updates, and gets it back when attaching.
+- Notes (`executor.note`, `Session.note`) go to Qibocal's `notes.json`, in the
+  session folder or in an execution folder, written with the lock and atomic
+  replacement used by qibocal-report's server, which may add notes
+  concurrently.
+- Protocols are identified by equality, not identity: loaded executions hold
+  copies of their protocol.
 
 ## Alternatives considered
 

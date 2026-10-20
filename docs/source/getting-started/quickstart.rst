@@ -146,9 +146,27 @@ in the folder, so the calibration continues where it was left.
 
 Executors without a local platform (e.g. with a remote runner) attach through
 an explicit session: ``Executor(None, session=Session.attach(path), ...)``.
+With a remote runner, the recorded platform state is handed to it, and sent
+along with its next acquisitions; its updates are recorded as well.
 Creating an executor on an existing, non-empty folder raises
 :class:`~qibocal_widgets.SessionExists`, unless ``force`` (in
 ``Executor.open``) replaces it.
+
+Notes
+~~~~~
+
+Notes on the session, or on one of its executions, are kept next to them, in
+Qibocal's ``notes.json``, where the report server shows (and adds) them too:
+
+.. code-block:: python
+
+    executor.note("cooldown 3, fridge at 12 mK")
+    executor.note("fringes look off", ramsey)
+    executor.session.notes(ramsey)  # read them back
+
+The author defaults to the author of the session metadata (the user name).
+Writes share the report server's lock, so notes added from the dashboard
+while the notebook runs are never lost.
 
 Output location
 ~~~~~~~~~~~~~~~
