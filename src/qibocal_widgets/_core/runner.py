@@ -14,6 +14,8 @@ from qibocal import Executor as QibocalExecutor
 from qibocal.auto.operation import BoundProtocol
 from qibocal.auto.task import Completed
 
+from . import platforms
+
 if TYPE_CHECKING:
     from .executor import Executor
 
@@ -40,6 +42,17 @@ class Runner:
     def platform_name(self, executor: Executor) -> str | None:
         """Name of the platform the steps run on, if known."""
         return executor.platform.name if executor.platform is not None else None
+
+    def platform_state(self, executor: Executor) -> platforms.State | None:
+        """Current calibration state of the platform the steps run on, if known."""
+        if executor.platform is None:
+            return None
+        return platforms.state(executor.platform)
+
+    def restore_platform(self, executor: Executor, state: platforms.State) -> None:
+        """Continue from a recorded calibration state (e.g. attaching a session)."""
+        if executor.platform is not None:
+            platforms.apply(executor.platform, state)
 
     def acquire(
         self, executor: Executor, bound: BoundProtocol, **kwargs: Any

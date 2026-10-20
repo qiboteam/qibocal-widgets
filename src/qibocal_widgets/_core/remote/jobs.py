@@ -15,6 +15,7 @@ from typing import Any
 
 from qibocal.auto.operation import BoundProtocol, Protocol
 
+from .. import platforms
 from ..protocols import reference
 from . import worker
 from .transport import RemoteError
@@ -88,15 +89,7 @@ def parameters(value: Any) -> Any:
 
 def platform_state(platform: Any) -> dict | None:
     """Calibration state of a local platform, if any."""
-    if platform is None:
-        return None
-    calibration = getattr(platform, "calibration", None)
-    return {
-        "parameters": platform.parameters.model_dump_json(),
-        "calibration": (
-            calibration.model_dump_json() if calibration is not None else None
-        ),
-    }
+    return platforms.state(platform) if platform is not None else None
 
 
 def _base(bound: BoundProtocol, platform: str, targets: Any, state: dict | None):

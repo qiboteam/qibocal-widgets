@@ -94,6 +94,16 @@ class Remote(Runner):
     def platform_name(self, executor: Executor) -> str | None:
         return self.connection.platform or super().platform_name(executor)
 
+    def platform_state(self, executor: Executor) -> dict | None:
+        return self._state(executor)
+
+    def restore_platform(self, executor: Executor, state: dict) -> None:
+        if executor.platform is not None:
+            super().restore_platform(executor, state)
+        else:
+            # the remote platform state, sent along with every acquisition
+            self.state = state
+
     def open(self, executor: Executor) -> None:
         if not self.connection.dispatched:
             return super().open(executor)
