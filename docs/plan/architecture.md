@@ -157,6 +157,32 @@ only connect and disconnect the platform.
 - Protocols are identified by equality, not identity: loaded executions hold
   copies of their protocol.
 
+### 6. Platform states (`_core.state`, `_core.explorer`)
+
+Following [#3](https://github.com/qiboteam/qibocal-widgets/issues/3),
+`PlatformState` explores and updates the calibration state of a platform by
+path, from code and with an interactive explorer.
+
+- It works on the JSON documents of the state (`parameters`, `calibration`),
+  not on platform objects, so the same API covers a local platform, the state
+  kept by a remote runner (asked to the remote machine through a `describe`
+  job when unknown), session folders, and snapshots.
+- Paths are dotted over the JSON documents, rooted at the document name.
+  Within a document, they coincide with qibolab's `Platform.update` paths and
+  with the dashboard's (checked: qibolab accepts the JSON form, pair keys
+  included). Pasted text is resolved leniently: root-less paths, and paths
+  quoted in code or output.
+- Updates are atomic and validated against the qibolab and Qibocal models,
+  and require existing paths. Through `executor.platform_state`, they go
+  through the runner (`Runner.set_platform_state`) and are recorded in the
+  session, as protocol updates.
+- The explorer is a single [anywidget](https://anywidget.dev), displayed
+  natively by Jupyter and Marimo: the only way to get clipboard access and a
+  real navigation bar in both, with one implementation. All the logic
+  (resolution, search, formatting, comparison, edits) is in Python, and
+  tested there; the browser side is a plain ES module (no build step) which
+  renders rows and sends requests back.
+
 ## Alternatives considered
 
 ### One executor subclass per feature, combined by inheritance

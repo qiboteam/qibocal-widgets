@@ -10,4 +10,5 @@ The public interface is made of the modules below. Everything else
     marimo
     jupyter
     remote
+    explorer
     core

@@ -74,6 +74,17 @@ folder with `executor.new_session()`, or continue an existing one with
 subfolder of it, so calibrations show up in its report dashboard;
 `reports_dir()` returns the folder.
 
+The calibration state of the platform can be explored and updated by path,
+with the same paths as qibolab's `Platform.update` and the qibocal-report
+dashboard, from code or with an interactive explorer (Jupyter and Marimo):
+
+```python
+state = executor.platform_state
+state["parameters.configs.0/drive.frequency"]
+state.update({"calibration.single_qubits.0.qubit.frequency_01": 4.1e9})
+state.explore(editable=True)
+```
+
 Middleware work like in web servers: each one wraps the executor steps
 (`acquire`, `fit`, `report`, `update`, and the context lifecycle), and may
 post-process every output. See the documentation to write your own frontends,
@@ -106,12 +117,15 @@ implemented in the private `qibocal_widgets._core` subpackage:
 - `qibocal_widgets.jupyter`: the `Jupyter` frontend (rendering with
   `ipywidgets`), `show_data`, `show_reports`, `wrap`.
 - `qibocal_widgets.remote`: the `Remote` runner, and connections management.
+- `qibocal_widgets.explorer`: the platform state explorer widget.
 
 Inside `_core`: `data` and `reports` (extraction, no frontend import),
 `layout` (shared display policy), `completed`, `frontend`, `runner`,
 `middleware` and `executor` (the executor and its roles), `marimo` and
 `jupyter` (rendering), `remote` (connections, job encoding, transport, and the
-self-contained remote worker).
+self-contained remote worker), `session`, `notes`, and `platforms` (session
+folders), `state` and `explorer` (platform states by path, and their widget,
+whose browser side is a plain ES module next to it).
 
 Other folders:
 

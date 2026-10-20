@@ -1,0 +1,138 @@
+.qw-explorer {
+  --qw-border: rgba(128, 128, 128, 0.3);
+  --qw-accent: #6400ff;
+  --qw-changed: rgba(255, 196, 0, 0.18);
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  max-width: 100%;
+}
+
+.qw-bar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.qw-nav,
+.qw-edit {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--qw-border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+
+.qw-edit {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.qw-button {
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 1px solid var(--qw-border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.qw-button:hover,
+.qw-crumbs a:hover,
+.qw-branch:hover {
+  color: var(--qw-accent);
+  border-color: var(--qw-accent);
+}
+
+.qw-option {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.qw-crumbs {
+  margin: 6px 0 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.qw-crumbs a,
+.qw-branch {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.qw-search {
+  font-style: italic;
+}
+
+.qw-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.qw-table td {
+  padding: 2px 6px;
+  border-top: 1px solid var(--qw-border);
+  vertical-align: middle;
+}
+
+.qw-name {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.qw-value {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  width: 100%;
+}
+
+.qw-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.qw-changed {
+  background: var(--qw-changed);
+}
+
+.qw-before {
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+.qw-empty {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.qw-footer {
+  margin-top: 4px;
+}
+
+.qw-error {
+  color: #d32f2f;
+  font-size: 12px;
+}
+
+.qw-snippet {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.qw-snippet code {
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.qw-hidden {
+  position: fixed;
+  opacity: 0;
+}
