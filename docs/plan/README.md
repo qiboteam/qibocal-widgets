@@ -10,7 +10,7 @@ they are to the current scope.
 | [architecture.md](architecture.md) | How the current minimal product works, and the alternatives considered | implemented |
 | [display-features.md](display-features.md) | Richer rendering of executions: results, parameters, history, comparisons | proposal |
 | [interactive-execution.md](interactive-execution.md) | Parameter forms, live acquisition, cell-level control of phases | proposal |
-| [remote-executor.md](remote-executor.md) | Running protocols on the lab machine from a notebook elsewhere ([#1](https://github.com/qiboteam/qibocal-widgets/issues/1)) | proposal, open questions |
+| [remote-executor.md](remote-executor.md) | Running protocols on the lab machine from a notebook elsewhere ([#1](https://github.com/qiboteam/qibocal-widgets/issues/1)) | implemented, follow-ups listed |
 | [slurm-monitor.md](slurm-monitor.md) | Widgets to submit, follow, and collect Qibocal jobs on a SLURM queue | proposal |
 | [packaging-and-ci.md](packaging-and-ci.md) | Release strategy, documentation site, test coverage on real protocols | proposal |
 

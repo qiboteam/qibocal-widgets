@@ -1,138 +1,123 @@
-# Remote executor
+# Remote execution
 
-Status: proposal, open questions below. Tracks
+Status: implemented (first version), with follow-ups below. Tracks
 [#1](https://github.com/qiboteam/qibocal-widgets/issues/1), following
 [qiboteam/qibocal#1210](https://github.com/qiboteam/qibocal/issues/1210).
+User documentation: `docs/source/getting-started/remote.rst`.
 
-Goal: run protocols on a machine with access to the instruments, while the
-notebook runs elsewhere, and freely combine this with the notebook executors.
+## Decisions
 
-## Settled: cut at the `Executor` level
+- **A plugin, not an executor subclass**: `Remote` is registered on the
+  general-purpose `Executor`, next to the frontend plugins, instead of
+  multiplying classes (see [architecture.md](architecture.md)). It belongs to
+  the `dispatch` exclusivity group.
+- **Cut at the executor level**: on the remote side, a plain
+  `qibocal.Executor` runs the step, the most tested path of Qibocal.
+- **Multi-tier, as in the interactive architecture of Qibocal and in
+  qibocal-report**: nothing on the compute node, one blocking `srun` job per
+  step from the access node, optionally through SSH from a laptop. The tier
+  follows from the connection options, not from detection.
+- **No Dask**: too specific; plain `srun` covers the queue. `submitit` remains
+  an option if ever needed.
+- **JSON and NPZ only, no pickle**: protocols by `module:attribute`
+  reference, parameters as JSON documents, platform state as Qibocal's JSON
+  dumps, data and results as the files of their `save` methods.
+- **Further protocols through environment management**, as qibocal-report
+  does for notebooks: requirements in `requirements.txt` format, installed
+  separately (`Remote.install()`) from execution.
+- **Connections configurable on the plugin or by name**, in a file shared with
+  qibocal-report, to be editable from its launcher
+  ([qibocal-report#53](https://github.com/qiboteam/qibocal-report/issues/53)).
 
-As argued in #1, dispatching at the `Executor` level (rather than
-`platform.execute()`) reuses the most tested path of Qibocal: on the remote
-side, a plain `qibocal.Executor` runs individual protocols, as it always has.
+## How it works
 
-### Only `acquire` and `update` need the instruments
+### Steps
+
+| Step | Where | Why |
+| --- | --- | --- |
+| `acquire` | remote (through the queue, if configured) | needs the instruments |
+| `fit`, `report` | local | pure functions of data and results |
+| `update` | local with a local platform, else remote on the access node | only modifies parameters |
+| `open`, `close` | skipped when dispatching | the platform is connected by each job |
 
 Checked on `protodev`: none of the 73 `fit` and 67 `report` callbacks of the
-built-in protocols takes the platform. So the split is:
+built-in protocols takes the platform.
 
-| Phase | Runs | Why |
-| --- | --- | --- |
-| `acquire` | remote | needs the connected platform |
-| `fit` | local | pure function of data; cheap to re-run with other settings |
-| `report` | local | pure function of data and results; figures never travel |
-| `update` | remote | mutates the platform that lives remotely |
+### Platform state
 
-This departs slightly from #1 (which lists reports among the serialized
-objects): reports need not travel at all, and neither do Plotly versions need
-to match. Data has to travel anyway, to be displayed.
+Jobs are independent: each one recreates the platform by name, then applies
+the current `parameters` and `calibration` JSON. The state comes from the
+local platform when the executor has one (updates are applied to it locally),
+otherwise from the state returned by the last remote update, kept by the
+plugin. Verified: a changed drive frequency reaches a freshly created
+platform, which still connects.
 
-### Data and results travel with Qibocal's own format
+### Wire protocol
 
-`Data.save`/`load` and `Results.save`/`load` (JSON + NPZ) already round-trip
-every protocol output, and are what Qibocal writes to disk. Checked on
-`ramsey_signal`: `data.json` + `data.npz`, loaded back into the protocol's
-`data_type`. No new serialization format is needed for outputs.
+Aligned with qibocal-report:
 
-### Composition with the notebook executors: cooperative mixins
+- commands are plain `ssh` and `srun` subprocesses; SSH runs with
+  `-T -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3`;
+  `srun --unbuffered [--partition Q] [options] --nodes=1 --ntasks=1`;
+- the worker source is shipped inline (`python3 -u -c`), so the remote
+  machine only needs Qibocal in the environment;
+- the job is written as JSON on the worker's standard input, and the outcome
+  read from a `QIBOCAL_WIDGETS_RESULT {json}` line on its standard output,
+  with files base64-encoded;
+- the bootstrap runs on the system `python3` (standard library only), and
+  re-runs the job with the environment's interpreter.
 
-`RemoteExecutor(qibocal.Executor)` overrides only `acquire`, `update`, and the
-context manager (`__enter__`/`__exit__` open and close a remote session
-instead of connecting a local platform). The widget executors already override
-every phase as `self._wrap(super().<phase>(...))`, so stacking them works
-through the MRO:
+### Configuration
 
-```python
-class MarimoRemoteExecutor(MarimoExecutor, RemoteExecutor):
-    pass
+`remotes.json`, next to qibocal-report's files
+(`$QIBOCAL_REPORT_CONFIG_DIR`, `$XDG_CONFIG_HOME/qibocal`,
+`~/.config/qibocal`), versioned and written atomically like them:
+
+```json
+{"version": 1, "connections": {"lab": {"ssh": "me@login", "queue": "qpu"}}}
 ```
 
-Checked with a stub remote: `MarimoRemoteExecutor(...)(bound)` acquires
-through the remote stub, fits and reports locally, and returns a
-`MarimoCompleted`. Each piece also works alone (`RemoteExecutor` returns plain
-`Completed`; `MarimoExecutor` stays local).
+Fields: `ssh`, `queue`, `slurm`, `workdir`, `venv`, `requirements`,
+`rebuild_on_compute` (same meaning as qibocal-report's notebook connections),
+plus `python` (interpreter or uv version for the environment), `platform`, and
+`timeout`. `QIBOCAL_WIDGETS_CONNECTION` selects a named connection for
+`Remote()`, so notebooks need no change across tiers.
 
-The transport is a constructor argument of `RemoteExecutor`, not a class
-dimension, so new transports do not multiply classes. Ready-made
-combinations (`MarimoRemoteExecutor`, `JupyterRemoteExecutor`) are exported by
-the frontend modules.
+### Environments
 
-The local executor has no platform (`platform=None`); parameters of the
-remote platform can be queried through the transport for display.
+Same location (`~/.cache/qibocal/envs/<venv>`), installer (uv, else venv and
+pip; `QIBOCAL_NO_UV`), and requirements marker file as qibocal-report, so an
+environment prepared by one tool is recognized by the other.
 
-## Open: transport
+## Testing
 
-This is the decision that depends on how labs reach the instruments, and it
-also constrains protocol serialization (next section).
+Fake `ssh`, `srun`, `python3` and `uv` executables on `PATH` log their
+arguments and run the actual commands locally, so the full exchange runs for
+real, against Qibocal's mock platform (vendored in `tests/platforms`): both a
+fake protocol (importable by reference from `tests/fake.py`) and the built-in
+`ramsey_signal`, with state round-trips through remote and local updates,
+timeouts, unreachable hosts, missing environments, and unavailable protocols.
 
-### A. Long-running server on the lab machine
+## Follow-ups
 
-A small RPC server wraps one `qibocal.Executor`; the client calls `acquire` /
-`update` over HTTP (stdlib or a light dependency), through an SSH tunnel.
-
-- Stateful session: the platform stays connected between calls, and updates
-  persist naturally, exactly like a local executor.
-- Lowest latency; best fit for interactive notebook use.
-- Needs a reachable process, and authentication.
-- Conflicts with queue-managed hardware: the server would have to hold the
-  queue allocation for its whole lifetime.
-
-### B. Batch jobs through a queue (the #1210 route)
-
-Each remote phase becomes a job folder (serialized inputs + an entry point),
-submitted through a user-registered script (`srun -p <partition> ...`); the
-client waits for, and loads, the output folder (Qibocal's own dump).
-
-- Fits labs where instruments are only reachable through SLURM partitions.
-- Stateless: each job re-creates the platform, so updates must be persisted
-  between jobs (shipping the platform with each job, or dumping it back).
-- Queue latency per phase; completion detection needed (polling the output
-  folder, or `sacct`). Pairs with the [SLURM monitor](slurm-monitor.md).
-- No dependency beyond SSH/shared filesystem.
-
-### C. Dask (`distributed`, optionally `dask-jobqueue`)
-
-A dask [actor](https://distributed.dask.org/en/stable/actors.html) holds the
-`qibocal.Executor` on a worker; its methods are the RPC API.
-`dask-jobqueue` provides workers through SLURM.
-
-- Covers both interactive and queue-based use with one mechanism.
-- Serialization (cloudpickle) and futures for free.
-- Heavy dependency, environments must match closely on both sides, and actors
-  are a less mainstream corner of dask.
-
-**Recommendation**: define a minimal `Transport` interface
-(`open`/`close`/`acquire`/`update`), with an in-process transport for tests,
-and implement **A first** if labs can run a long-lived process next to the
-instruments, otherwise **B first**. C is attractive but heavy; worth
-prototyping only if both interactive and queue use are needed soon.
-
-## Open: how protocols travel
-
-The remote side must run the same acquisition (and update) code.
-
-1. **By reference** (plain `pickle`): works for all built-in and importable
-   protocols (checked: a bound `ramsey_signal` is 530 bytes). Fails for
-   protocols defined in a notebook cell. Requires compatible Qibocal versions.
-2. **By value** (`cloudpickle`): also ships notebook-defined protocols.
-   Requires the same Python minor version, and means executing arbitrary code
-   on the lab machine: acceptable only behind authentication, between trusted
-   parties.
-3. **By name + parameters** (runcard-like: protocol id, targets, parameters as
-   a dictionary, as Qibocal runcards already do): no code shipped, robust
-   across versions, safest; only registered protocols.
-
-**Recommendation**: 1 by default, which is the simplest and covers the
-built-in protocols. Add 3 if version skew or security becomes a concern, and
-2 as an explicit opt-in for custom protocols.
-
-## Questions to settle before implementing
-
-1. How do labs reach the instruments: a host where a long-lived process can
-   run (A), only through SLURM jobs (B), or both?
-2. Must notebook-defined protocols run remotely, or are importable protocols
-   enough for a start?
-3. Is the remote side trusted (same team, behind SSH), or should the server
-   refuse to execute shipped code?
+1. **Launcher integration** (qibocal-report#53): a "Remote execution" section
+   editing `remotes.json`; the schema is meant to be shared, possibly moving
+   the connection model to a common package.
+2. **Report server on the same channel** (as qibocal-report#50 does for
+   notebooks): persist remote outputs in the executor's output folder, so a
+   report server can serve them.
+3. **Persisting outputs**: today data are loaded into memory; dumping them
+   (and the platform state) in the executor's `path` would mirror local runs.
+4. **Cancellation**: interrupting the kernel kills the local `ssh`/`srun`
+   process; check that the remote job is reliably cancelled (process groups,
+   or `scancel` by job name).
+5. **Connection reuse**: one SSH connection per step; `ControlMaster`
+   multiplexing would cut the latency of repeated steps.
+6. **Long queues**: a blocking `srun` keeps the notebook busy while queued.
+   An asynchronous mode (submitted job, future-like execution displayed as
+   pending, then completed) would pair with the
+   [SLURM monitor](slurm-monitor.md).
+7. **Remote platform inspection**: a `describe` action returning the current
+   remote platform parameters, for display without a local platform.
+8. **Coverage of the worker**: it runs in subprocesses, so its coverage is not
+   measured; enable subprocess coverage collection.

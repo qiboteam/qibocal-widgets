@@ -1,7 +1,7 @@
 API reference
 =============
 
-The public interface is made of the three modules below. Everything else
+The public interface is made of the modules below. Everything else
 (the ``qibocal_widgets._core`` subpackage) is an implementation detail.
 
 .. toctree::
@@ -9,4 +9,5 @@ The public interface is made of the three modules below. Everything else
 
     marimo
     jupyter
+    remote
     core

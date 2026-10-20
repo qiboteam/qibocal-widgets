@@ -33,6 +33,7 @@ helper call.
 
     getting-started/installation
     getting-started/quickstart
+    getting-started/remote
 
 .. toctree::
     :maxdepth: 2

@@ -22,12 +22,9 @@ installed from PyPI would resolve to the released Qibocal, which lacks the
 - Windows is excluded for now (Qibocal's own tests run there; nothing in this
   package is platform specific, so it can be added once the Qibocal git
   dependency proves to install reliably on Windows runners).
-- Tests use a fake protocol and a platform-less executor, so they run without
-  Qibolab platforms. Add a second layer running one real protocol
-  (`ramsey_signal`) on Qibocal's `mock` platform: this requires either
-  vendoring the mock platform folder under `tests/platforms` or Qibocal
-  shipping it in the package. The smoke test performed during development
-  used the former.
+- Qibocal's `mock` platform is vendored under `tests/platforms`, and the
+  remote execution tests run the built-in `ramsey_signal` on it. Displaying
+  real protocols in the frontend tests could reuse it.
 - Coverage upload relies on Codecov through the reusable workflow; configure
   the `CODECOV_TOKEN` secret in the repository (tokenless upload works for
   public pull requests only).

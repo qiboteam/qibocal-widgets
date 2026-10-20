@@ -56,6 +56,10 @@ Executions produced by a plain `qibocal.Executor` (or loaded from disk) can be
 made displayable with `wrap(completed)`, or simply by passing them through any
 phase of an executor with the plugin.
 
+The `Remote` plugin (`qibocal_widgets.remote`) dispatches the acquisition to
+the machine with the instruments, through SLURM and SSH, while fit and report
+run locally; named connections are shared with qibocal-report.
+
 Plugins work like web-server middleware: each one wraps the executor steps
 (`acquire`, `fit`, `report`, `update`, and the context lifecycle), and may
 post-process every output. See the documentation to write your own.
@@ -85,10 +89,12 @@ implemented in the private `qibocal_widgets._core` subpackage:
   `wrap`.
 - `qibocal_widgets.jupyter`: the `Jupyter` plugin (rendering with
   `ipywidgets`), `show_data`, `show_reports`, `wrap`.
+- `qibocal_widgets.remote`: the `Remote` plugin, and connections management.
 
 Inside `_core`: `data` and `reports` (extraction, no frontend import),
 `layout` (shared display policy), `plugin` and `executor` (the plugin
-machinery), `marimo` and `jupyter` (rendering).
+machinery), `marimo` and `jupyter` (rendering), `remote` (connections, job encoding,
+transport, and the self-contained remote worker).
 
 Other folders:
 
