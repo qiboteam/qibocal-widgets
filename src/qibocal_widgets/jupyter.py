@@ -1,10 +1,11 @@
 """Jupyter interface.
 
-Usage, inside a Jupyter notebook (JupyterLab, VS Code, ...)::
+Usage, inside a Jupyter notebook::
 
-    from qibocal_widgets.jupyter import JupyterExecutor
+    from qibocal_widgets import Executor
+    from qibocal_widgets.jupyter import Jupyter
 
-    executor = JupyterExecutor.create(platform=platform, path="var/report")
+    executor = Executor.create(platform=platform, path="var/report", plugins=[Jupyter()])
     with executor:
         acquired = executor.acquire(bound, targets=[0, 1])
     acquired  # rendered: raw data tables
@@ -12,13 +13,15 @@ Usage, inside a Jupyter notebook (JupyterLab, VS Code, ...)::
     completed = executor(bound)
     completed  # rendered: raw data tables and per-target reports
 
-Rendering relies on ``ipywidgets``. The :func:`show_data` and
-:func:`show_reports` helpers remain available for explicit control.
+Rendering relies on ``ipywidgets``.
+
+The :func:`show_data` and :func:`show_reports` helpers remain available for
+explicit, finer-grained control, and :func:`wrap` makes any execution
+displayable.
 """
 
 from ._core.jupyter import (
-    JupyterCompleted,
-    JupyterExecutor,
+    Jupyter,
     display,
     show_data,
     show_reports,
@@ -26,8 +29,7 @@ from ._core.jupyter import (
 )
 
 __all__ = [
-    "JupyterCompleted",
-    "JupyterExecutor",
+    "Jupyter",
     "display",
     "show_data",
     "show_reports",

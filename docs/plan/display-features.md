@@ -31,8 +31,8 @@ summary this turns the cell output into a complete record of the experiment.
 
 ## 4. Widget-free HTML fallback (Jupyter)
 
-`JupyterCompleted` currently needs `ipywidgets`. Provide `_repr_mimebundle_`
-returning a `text/html` bundle (pandas `to_html`, Plotly `to_html(full_html=
+The `Jupyter` plugin currently needs `ipywidgets`. Provide a view returning a
+`text/html` bundle (pandas `to_html`, Plotly `to_html(full_html=
 False, include_plotlyjs="cdn")`, `<details>` elements as accordion) so that:
 
 - static exports (`nbconvert`, GitHub rendering, Sphinx `nbsphinx`) keep the
@@ -40,8 +40,7 @@ False, include_plotlyjs="cdn")`, `<details>` elements as accordion) so that:
 - the `jupyter` extra can drop the hard dependency on `ipywidgets` (kept as
   optional enhancement).
 
-A module-level switch, or a `JupyterExecutor(..., widgets=False)` option, picks
-the renderer.
+A `Jupyter(widgets=False)` plugin option picks the renderer.
 
 ## 5. Opt-in formatter registration (Jupyter)
 
@@ -52,7 +51,7 @@ See the alternatives discussion in [architecture.md](architecture.md).
 ## 6. History browser
 
 `Executor.history` collects every execution of a session. A
-`show_history(executor)` widget (or making `WidgetExecutor` itself
+`show_history(executor)` widget (or making the `Executor` itself
 displayable) lists executions with summary rows and expands into the full
 display on click. In Marimo this is a `mo.ui.table` with row selection driving
 a second cell; in Jupyter a `Select` widget driving an `Output`.
@@ -66,7 +65,7 @@ side with shared titles.
 
 ## 8. Loading reports from disk
 
-`WidgetExecutor.load(path)` exists; add a `qibocal_widgets.load(path,
+`Executor.load(path)` exists; add a `qibocal_widgets.load(path,
 frontend=...)` convenience and the ability to browse an output folder
 (`Output.load`) as a history, so widgets are usable for post-processing with
 no platform at all.

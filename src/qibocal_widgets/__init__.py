@@ -1,26 +1,35 @@
 """Notebook integration for the Qibocal executor.
 
-Two independent interfaces are provided, sharing the same core:
+:class:`Executor` is a drop-in replacement of :class:`qibocal.Executor`,
+extended through a list of plugins::
+
+    from qibocal_widgets import Executor
+    from qibocal_widgets.marimo import Marimo
+
+    executor = Executor.create(platform="mock", path="var/report", plugins=[Marimo()])
+
+Frontend plugins live in their own modules:
 
 - :mod:`qibocal_widgets.marimo` (requires the ``marimo`` extra)
 - :mod:`qibocal_widgets.jupyter` (requires the ``jupyter`` extra)
 
-Each exposes an executor whose phases return executions that render
-themselves in the notebook, together with explicit ``show_data`` and
-``show_reports`` helpers.
-
-This module only exposes the frontend-agnostic building blocks, useful to
-customize the display or to support further frontends.
+This module also exposes the frontend-agnostic building blocks, useful to
+write further plugins.
 """
 
 from ._core.data import data_frames
-from ._core.executor import WidgetExecutor, convert
+from ._core.executor import Completed, Executor, View, convert
+from ._core.plugin import Plugin, PluginConflict
 from ._core.reports import Report, reports, reports_of
 from ._core.version import __version__
 
 __all__ = [
+    "Completed",
+    "Executor",
+    "Plugin",
+    "PluginConflict",
     "Report",
-    "WidgetExecutor",
+    "View",
     "__version__",
     "convert",
     "data_frames",

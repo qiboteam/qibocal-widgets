@@ -6,11 +6,11 @@ from conftest import TARGETS
 marimo = pytest.importorskip("marimo")
 
 from marimo._output.formatting import get_formatter
-from qibocal.auto.task import Completed
+from qibocal.auto.task import Completed as QibocalCompleted
 
+from qibocal_widgets import Completed, Executor
 from qibocal_widgets.marimo import (
-    MarimoCompleted,
-    MarimoExecutor,
+    Marimo,
     display,
     show_data,
     show_reports,
@@ -29,13 +29,13 @@ def render(obj) -> str:
 
 @pytest.fixture
 def widget_executor():
-    return MarimoExecutor(None, targets=TARGETS, update=False)
+    return Executor(None, targets=TARGETS, update=False, plugins=[Marimo()])
 
 
-def test_executor_returns_marimo_completed(widget_executor, bound):
+def test_executor_attaches_marimo_view(widget_executor, bound):
     completed = widget_executor(bound)
-    assert isinstance(completed, MarimoCompleted)
-    assert isinstance(widget_executor.acquire(bound), MarimoCompleted)
+    assert "_display_" in completed.views
+    assert "_display_" in widget_executor.acquire(bound).views
 
 
 def test_display_protocol(widget_executor, bound):
@@ -96,14 +96,14 @@ def test_show_helpers(completed):
     assert isinstance(show_reports(completed.reports), marimo.Html)
 
     wrapped = wrap(completed)
-    assert "Raw data: 1" in render(wrapped.show_data())
-    assert "Target 1" in render(wrapped.show_reports())
+    assert "Raw data: 1" in render(show_data(wrapped))
+    assert "Target 1" in render(show_reports(wrapped))
 
 
 def test_empty():
     assert "No acquired data" in render(show_data({}))
     assert "No report" in render(show_reports(None))
-    assert "Nothing to display" in render(display(MarimoCompleted()))
+    assert "Nothing to display" in render(display(Completed()))
 
 
 def test_error_section(completed):
@@ -114,5 +114,5 @@ def test_error_section(completed):
 
 
 def test_wrap_plain(completed):
-    assert type(completed) is Completed
-    assert isinstance(wrap(completed), MarimoCompleted)
+    assert type(completed) is QibocalCompleted
+    assert "_display_" in wrap(completed).views

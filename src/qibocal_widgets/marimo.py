@@ -2,9 +2,10 @@
 
 Usage, inside a Marimo notebook::
 
-    from qibocal_widgets.marimo import MarimoExecutor
+    from qibocal_widgets import Executor
+    from qibocal_widgets.marimo import Marimo
 
-    executor = MarimoExecutor.create(platform=platform, path="var/report")
+    executor = Executor.create(platform=platform, path="var/report", plugins=[Marimo()])
     with executor:
         acquired = executor.acquire(bound, targets=[0, 1])
     acquired  # rendered: raw data tables
@@ -13,12 +14,12 @@ Usage, inside a Marimo notebook::
     completed  # rendered: raw data tables and per-target reports
 
 The :func:`show_data` and :func:`show_reports` helpers remain available for
-explicit, finer-grained control.
+explicit, finer-grained control, and :func:`wrap` makes any execution
+displayable.
 """
 
 from ._core.marimo import (
-    MarimoCompleted,
-    MarimoExecutor,
+    Marimo,
     display,
     show_data,
     show_reports,
@@ -26,8 +27,7 @@ from ._core.marimo import (
 )
 
 __all__ = [
-    "MarimoCompleted",
-    "MarimoExecutor",
+    "Marimo",
     "display",
     "show_data",
     "show_reports",

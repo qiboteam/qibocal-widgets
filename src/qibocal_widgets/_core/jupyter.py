@@ -6,21 +6,20 @@ Jupyter renderers of pandas and Plotly.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import ipywidgets as widgets
 from IPython.display import display as ipy_display
-from qibocal.auto.task import Completed
+from qibocal.auto.task import Completed as QibocalCompleted
 
 from . import layout
 from .data import data_frames
-from .executor import WidgetExecutor, convert
+from .executor import MIMEBUNDLE, Completed, Executor, convert
+from .plugin import Plugin
 from .reports import Report, reports, reports_of
 
 __all__ = [
-    "JupyterCompleted",
-    "JupyterExecutor",
+    "Jupyter",
     "display",
     "show_data",
     "show_reports",
@@ -59,7 +58,7 @@ def show_data(data: Any) -> widgets.Widget:
         data: a Qibocal ``Data`` instance, or an execution (``Completed``), in
             which case its acquired data is used.
     """
-    if isinstance(data, Completed):
+    if isinstance(data, QibocalCompleted):
         data = data.data
     tables = {
         layout.data_title(target): _output(frame)
@@ -101,7 +100,9 @@ def show_reports(reports_: Any) -> widgets.Widget:
             itself.
     """
     items = (
-        reports(reports_) if isinstance(reports_, Completed) else reports_of(reports_)
+        reports(reports_)
+        if isinstance(reports_, QibocalCompleted)
+        else reports_of(reports_)
     )
     outputs = {
         layout.report_title(target): _report_item(report)
@@ -112,7 +113,7 @@ def show_reports(reports_: Any) -> widgets.Widget:
     return _accordion(outputs, expanded=layout.expanded(outputs))
 
 
-def display(completed: Completed) -> widgets.Widget:
+def display(completed: QibocalCompleted) -> widgets.Widget:
     """Full rendering of an execution: data and, when available, reports."""
     sections: dict[str, widgets.Widget] = {}
     try:
@@ -137,28 +138,17 @@ def display(completed: Completed) -> widgets.Widget:
     return tabs
 
 
-@dataclass
-class JupyterCompleted(Completed):
-    """Execution that renders itself as a Jupyter output."""
+class Jupyter(Plugin):
+    """Display every execution in Jupyter, with :func:`display`.
 
-    def _ipython_display_(self) -> None:
-        ipy_display(display(self))
+    Compatible with :class:`~qibocal_widgets.marimo.Marimo`: each frontend
+    uses its own view.
+    """
 
-    def show_data(self) -> widgets.Widget:
-        """Raw data tables."""
-        return show_data(self.data)
-
-    def show_reports(self) -> widgets.Widget:
-        """Report figures and tables."""
-        return show_reports(self.reports)
+    def result(self, executor: Executor, completed: QibocalCompleted) -> Completed:
+        return wrap(completed)
 
 
-def wrap(completed: Completed) -> JupyterCompleted:
-    """Turn any execution into a self-displaying one."""
-    return convert(completed, JupyterCompleted)
-
-
-class JupyterExecutor(WidgetExecutor):
-    """Qibocal executor whose phases return :class:`JupyterCompleted` objects."""
-
-    completed_type = JupyterCompleted
+def wrap(completed: QibocalCompleted) -> Completed:
+    """Make any execution display itself in Jupyter."""
+    return convert(completed).with_view(MIMEBUNDLE, display)

@@ -11,7 +11,8 @@ with app.setup(hide_code=True):
     import marimo as mo
     from qibocal import protocols
 
-    from qibocal_widgets.marimo import MarimoExecutor
+    from qibocal_widgets import Executor
+    from qibocal_widgets.marimo import Marimo, show_data, show_reports
 
     # Point QIBOLAB_PLATFORMS to a folder containing your platform, e.g. the
     # `tests/platforms` folder of the Qibocal repository for the `mock` one.
@@ -23,8 +24,8 @@ def _():
     mo.md("""
     # Qibocal executions, displayed implicitly
 
-    Every phase of a `MarimoExecutor` returns a `MarimoCompleted`, which
-    renders itself when it is the last expression of a cell.
+    With the `Marimo` plugin, every phase of the executor returns an
+    execution which renders itself when it is the last expression of a cell.
     """)
     return
 
@@ -34,7 +35,9 @@ def _():
     path = Path("var/report")
     if path.exists():
         shutil.rmtree(path)
-    executor = MarimoExecutor.create(path=path, platform=PLATFORM, update=False)
+    executor = Executor.create(
+        path=path, platform=PLATFORM, update=False, plugins=[Marimo()]
+    )
     return (executor,)
 
 
@@ -83,7 +86,7 @@ def _():
 
 @app.cell
 def _(reported):
-    mo.hstack([reported.show_data(), reported.show_reports()])
+    mo.hstack([show_data(reported), show_reports(reported)])
     return
 
 

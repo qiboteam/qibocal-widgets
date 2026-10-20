@@ -3,11 +3,11 @@ from conftest import TARGETS
 
 widgets = pytest.importorskip("ipywidgets")
 
-from qibocal.auto.task import Completed
+from qibocal.auto.task import Completed as QibocalCompleted
 
+from qibocal_widgets import Completed, Executor
 from qibocal_widgets.jupyter import (
-    JupyterCompleted,
-    JupyterExecutor,
+    Jupyter,
     display,
     show_data,
     show_reports,
@@ -21,18 +21,19 @@ def titles(container) -> list[str]:
 
 @pytest.fixture
 def widget_executor():
-    return JupyterExecutor(None, targets=TARGETS, update=False)
+    return Executor(None, targets=TARGETS, update=False, plugins=[Jupyter()])
 
 
-def test_executor_returns_jupyter_completed(widget_executor, bound):
+def test_executor_attaches_jupyter_view(widget_executor, bound):
     completed = widget_executor(bound)
-    assert isinstance(completed, JupyterCompleted)
-    assert isinstance(widget_executor.acquire(bound), JupyterCompleted)
+    assert "_repr_mimebundle_" in completed.views
+    assert "_repr_mimebundle_" in widget_executor.acquire(bound).views
 
 
 def test_display_protocol(widget_executor, bound):
     completed = widget_executor(bound)
-    assert callable(completed._ipython_display_)
+    bundle = completed._repr_mimebundle_()
+    assert "application/vnd.jupyter.widget-view+json" in bundle
 
     widget = display(completed)
     assert isinstance(widget, widgets.Tab)
@@ -42,13 +43,21 @@ def test_display_protocol(widget_executor, bound):
     assert titles(reports) == [f"Target {t}" for t in TARGETS]
 
 
-def test_ipython_display_calls_display(widget_executor, bound, monkeypatch):
+def test_mimebundle_renders_display(widget_executor, bound, monkeypatch):
     completed = widget_executor(bound)
     shown = []
-    monkeypatch.setattr("qibocal_widgets._core.jupyter.ipy_display", shown.append)
-    completed._ipython_display_()
-    # nested outputs also go through display(); the outermost widget is last
-    assert isinstance(shown[-1], widgets.Tab)
+
+    def spy(c):
+        shown.append(display(c))
+        return shown[-1]
+
+    monkeypatch.setitem(completed.views, "_repr_mimebundle_", spy)
+    bundle = completed._repr_mimebundle_()
+    (widget,) = shown
+    assert isinstance(widget, widgets.Tab)
+    assert bundle["application/vnd.jupyter.widget-view+json"]["model_id"] == (
+        widget.model_id
+    )
 
 
 def test_acquired_shows_only_data(widget_executor, bound):
@@ -98,14 +107,14 @@ def test_show_helpers(completed):
     assert isinstance(show_reports(completed.reports), widgets.Accordion)
 
     wrapped = wrap(completed)
-    assert isinstance(wrapped.show_data(), widgets.Accordion)
-    assert isinstance(wrapped.show_reports(), widgets.Accordion)
+    assert isinstance(show_data(wrapped), widgets.Accordion)
+    assert isinstance(show_reports(wrapped), widgets.Accordion)
 
 
 def test_empty():
     assert "No acquired data" in show_data({}).value
     assert "No report" in show_reports(None).value
-    assert "Nothing to display" in display(JupyterCompleted()).value
+    assert "Nothing to display" in display(Completed()).value
 
 
 def test_error_section(completed):
@@ -118,5 +127,5 @@ def test_error_section(completed):
 
 
 def test_wrap_plain(completed):
-    assert type(completed) is Completed
-    assert isinstance(wrap(completed), JupyterCompleted)
+    assert type(completed) is QibocalCompleted
+    assert "_repr_mimebundle_" in wrap(completed).views

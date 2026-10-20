@@ -16,15 +16,18 @@ Qibocal's `Executor` returns a `Completed` object from every phase
 Displaying its content in a notebook used to require wrapping it manually in
 dedicated helper functions.
 
-`qibocal-widgets` provides drop-in executors whose outputs render themselves:
+`qibocal-widgets` provides a drop-in executor, extended through plugins. With
+a frontend plugin, its outputs render themselves:
 
 ```python
 from qibocal import protocols
 
-# or: from qibocal_widgets.jupyter import JupyterExecutor
-from qibocal_widgets.marimo import MarimoExecutor
+from qibocal_widgets import Executor
+from qibocal_widgets.marimo import Marimo  # or: qibocal_widgets.jupyter.Jupyter
 
-executor = MarimoExecutor.create(platform=platform, path="var/report", update=False)
+executor = Executor.create(
+    platform=platform, path="var/report", update=False, plugins=[Marimo()]
+)
 bound = protocols.ramsey(delay=(10, 1000, 100))
 
 with executor:
@@ -33,26 +36,29 @@ acquired  # the cell output is an accordion with the raw data tables
 
 fitted = executor.fit(acquired)
 reported = executor.report(fitted)
-reported  # the cell output has two tabs: raw data and per-target reports (plots + fit table)
+reported  # two tabs: raw data and per-target reports (plots + fit table)
 ```
 
-Every phase returns a `MarimoCompleted` (or `JupyterCompleted`): a subclass of
-Qibocal's `Completed` carrying exactly the same attributes (`data`, `results`,
-`reports`, `targets`, ...) plus the display protocol of the chosen frontend.
-Explicit helpers remain available when finer control is needed:
+Every phase returns a `qibocal_widgets.Completed`: a subclass of Qibocal's
+`Completed` carrying exactly the same attributes (`data`, `results`,
+`reports`, `targets`, ...) plus the views registered by plugins. The Marimo and
+Jupyter plugins can be registered together. Explicit helpers remain available
+when finer control is needed:
 
 ```python
 from qibocal_widgets.marimo import show_data, show_reports
 
-show_data(completed.data)
-show_reports(completed.reports)
-completed.show_data()  # same, as methods
-completed.show_reports()
+show_data(completed)
+show_reports(completed)
 ```
 
 Executions produced by a plain `qibocal.Executor` (or loaded from disk) can be
 made displayable with `wrap(completed)`, or simply by passing them through any
-phase of a widget executor.
+phase of an executor with the plugin.
+
+Plugins work like web-server middleware: each one wraps the executor steps
+(`acquire`, `fit`, `report`, `update`, and the context lifecycle), and may
+post-process every output. See the documentation to write your own.
 
 ## Installation
 
@@ -73,17 +79,16 @@ qibocal = { git = "https://github.com/qiboteam/qibocal.git", branch = "protodev"
 The public interface is made of three modules, which only re-export objects
 implemented in the private `qibocal_widgets._core` subpackage:
 
-- `qibocal_widgets`: frontend-agnostic building blocks (`WidgetExecutor`,
-  `convert`, `data_frames`, `reports`, `Report`, ...).
-- `qibocal_widgets.marimo`: `MarimoExecutor`, `MarimoCompleted` (implements
-  `_display_`), `show_data`, `show_reports`.
-- `qibocal_widgets.jupyter`: `JupyterExecutor`, `JupyterCompleted` (implements
-  `_ipython_display_`, rendering with `ipywidgets`), `show_data`,
-  `show_reports`.
+- `qibocal_widgets`: `Executor`, `Plugin`, `Completed`, and the
+  frontend-agnostic building blocks (`data_frames`, `reports`, `Report`, ...).
+- `qibocal_widgets.marimo`: the `Marimo` plugin, `show_data`, `show_reports`,
+  `wrap`.
+- `qibocal_widgets.jupyter`: the `Jupyter` plugin (rendering with
+  `ipywidgets`), `show_data`, `show_reports`, `wrap`.
 
 Inside `_core`: `data` and `reports` (extraction, no frontend import),
-`executor` (the `Executor` subclass re-wrapping the output of every phase),
-`marimo` and `jupyter` (rendering).
+`layout` (shared display policy), `plugin` and `executor` (the plugin
+machinery), `marimo` and `jupyter` (rendering).
 
 Other folders:
 

@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import marimo as mo
-from qibocal.auto.task import Completed
+from qibocal.auto.task import Completed as QibocalCompleted
 
 from . import layout
 from .data import data_frames
-from .executor import WidgetExecutor, convert
+from .executor import MARIMO, Completed, Executor, convert
+from .plugin import Plugin
 from .reports import Report, reports, reports_of
 
 __all__ = [
-    "MarimoCompleted",
-    "MarimoExecutor",
+    "Marimo",
     "display",
     "show_data",
     "show_reports",
@@ -30,7 +29,7 @@ def show_data(data: Any) -> mo.Html:
         data: a Qibocal ``Data`` instance, or an execution (``Completed``), in
             which case its acquired data is used.
     """
-    if isinstance(data, Completed):
+    if isinstance(data, QibocalCompleted):
         data = data.data
     tables = {
         layout.data_title(target): mo.ui.table(frame)
@@ -63,7 +62,9 @@ def show_reports(reports_: Any) -> mo.Html:
             itself.
     """
     items = (
-        reports(reports_) if isinstance(reports_, Completed) else reports_of(reports_)
+        reports(reports_)
+        if isinstance(reports_, QibocalCompleted)
+        else reports_of(reports_)
     )
     outputs = {
         layout.report_title(target): _report_item(report)
@@ -74,7 +75,7 @@ def show_reports(reports_: Any) -> mo.Html:
     return mo.accordion(outputs, expanded=layout.expanded(outputs))
 
 
-def display(completed: Completed) -> mo.Html:
+def display(completed: QibocalCompleted) -> mo.Html:
     """Full rendering of an execution: data and, when available, reports."""
     sections: dict[str, Any] = {}
     try:
@@ -95,28 +96,17 @@ def display(completed: Completed) -> mo.Html:
     return mo.ui.tabs(sections, value=layout.initial_section(sections))
 
 
-@dataclass
-class MarimoCompleted(Completed):
-    """Execution that renders itself as a Marimo output."""
+class Marimo(Plugin):
+    """Display every execution in Marimo, with :func:`display`.
 
-    def _display_(self) -> Any:
-        return display(self)
+    Compatible with :class:`~qibocal_widgets.jupyter.Jupyter`: each frontend
+    uses its own view.
+    """
 
-    def show_data(self) -> mo.Html:
-        """Raw data tables."""
-        return show_data(self.data)
-
-    def show_reports(self) -> mo.Html:
-        """Report figures and tables."""
-        return show_reports(self.reports)
+    def result(self, executor: Executor, completed: QibocalCompleted) -> Completed:
+        return wrap(completed)
 
 
-def wrap(completed: Completed) -> MarimoCompleted:
-    """Turn any execution into a self-displaying one."""
-    return convert(completed, MarimoCompleted)
-
-
-class MarimoExecutor(WidgetExecutor):
-    """Qibocal executor whose phases return :class:`MarimoCompleted` objects."""
-
-    completed_type = MarimoCompleted
+def wrap(completed: QibocalCompleted) -> Completed:
+    """Make any execution display itself in Marimo."""
+    return convert(completed).with_view(MARIMO, display)
