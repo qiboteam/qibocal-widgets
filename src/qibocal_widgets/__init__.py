@@ -25,6 +25,10 @@ the executor lives. Without an explicit ``path``, ``Executor.create`` and
 ``Executor.open`` use a fresh folder of the session's reports folder
 (:func:`reports_dir`).
 
+The calibration state of the platform can be explored and updated by path,
+programmatically or with an interactive explorer (:class:`PlatformState`,
+``executor.platform_state``).
+
 This module also exposes the frontend-agnostic building blocks, useful to
 write further runners, middleware, and frontends.
 """
@@ -38,6 +42,7 @@ from ._core.output import reports_dir
 from ._core.reports import Report, reports, reports_of
 from ._core.runner import Local, Runner
 from ._core.session import Session, SessionExists
+from ._core.state import PlatformState, ReadOnlyState
 from ._core.version import __version__
 
 __all__ = [
@@ -46,6 +51,8 @@ __all__ = [
     "Frontend",
     "Local",
     "Middleware",
+    "PlatformState",
+    "ReadOnlyState",
     "Report",
     "Runner",
     "Session",

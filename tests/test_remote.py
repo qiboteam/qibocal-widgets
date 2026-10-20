@@ -489,8 +489,12 @@ def test_session_remote_state(cluster, tmp_path, bound):
     drive = create_calibration_platform("mock").qubits[0].drive
     recorded = json.loads((path / "new_platform" / "parameters.json").read_text())
     assert recorded["configs"][drive]["frequency"] == peak * 1e9
-    # the remote platform state was unknown at the start
-    assert not (path / "platform").exists()
+    # the initial state was asked to the remote machine, at the start
+    initial = json.loads((path / "platform" / "parameters.json").read_text())
+    original = create_calibration_platform("mock")
+    assert initial["configs"][drive]["frequency"] == (
+        original.config(original.qubits[0].drive).frequency
+    )
 
     fresh = Remote(ssh="me@login", queue="chip", platform="mock")
     attached = Executor(
@@ -509,3 +513,20 @@ def test_reference_of_copies():
     assert jobs.protocol_reference(copy.deepcopy(protocols.ramsey_signal)) == (
         "qibocal.protocols:ramsey_signal"
     )
+
+
+def test_platform_state_remote(cluster, tmp_path, mock_frequency):
+    """Without a local platform, the state is asked to the remote machine."""
+    remote = Remote(ssh="me@login", queue="chip", platform="mock")
+    executor = Executor(None, targets=TARGETS, runner=remote)
+    state = executor.platform_state
+    path = "parameters.configs.0/drive.frequency"
+    assert state[path] == mock_frequency[0]
+    # described once, on the access node (no queue)
+    assert [call["tool"] for call in cluster()] == ["ssh"]
+    state.update({path: 4.321e9})
+    state[path]
+    assert len(cluster()) == 1
+    # edits travel with the next acquisition
+    bound = fake(npoints=3)
+    assert executor.acquire(bound).data.scale == {0: 4.321e9, 1: mock_frequency[1]}

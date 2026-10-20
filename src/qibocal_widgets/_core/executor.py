@@ -30,6 +30,7 @@ from .middleware import Middleware
 from .output import REPORTS_DIR, default_path
 from .runner import Local, Runner
 from .session import Session
+from .state import PlatformState
 
 __all__ = ["Executor"]
 
@@ -214,6 +215,26 @@ class Executor(QibocalExecutor):
         self.path = self.session.path
         self.meta = meta
         return self.session
+
+    @property
+    def platform_state(self) -> PlatformState:
+        """The calibration state of the platform, to explore and update by path.
+
+        It is the state the steps run on, as known by the runner: the local
+        platform, or the state kept by a remote runner (asked to the remote
+        machine, if not known yet). Updates are applied through the runner,
+        and recorded in the session, as protocol updates are.
+        """
+        return PlatformState(
+            lambda: self.runner.platform_state(self),
+            self._set_platform_state,
+            name="executor.platform_state",
+        )
+
+    def _set_platform_state(self, state) -> None:
+        self.runner.set_platform_state(self, state)
+        if self.session is not None:
+            self.session.platform(self)
 
     def note(
         self,
