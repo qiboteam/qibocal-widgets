@@ -94,12 +94,29 @@ class Remote(Runner):
     def platform_name(self, executor: Executor) -> str | None:
         return self.connection.platform or super().platform_name(executor)
 
-    def platform_state(self, executor: Executor) -> dict | None:
-        return self._state(executor)
+    def describe(self, executor: Executor) -> dict:
+        """The calibration state of the remote platform, as found remotely.
 
-    def restore_platform(self, executor: Executor, state: dict) -> None:
+        Runs on the access node, outside of the queue: the platform is created,
+        but not connected.
+        """
+        job = {"action": "describe", "platform": self._platform(executor)}
+        return transport.run(self.connection, job, compute=False)["state"]
+
+    def platform_state(self, executor: Executor) -> dict | None:
+        state = self._state(executor)
+        if (
+            state is None
+            and self.connection.dispatched
+            and self.platform_name(executor) is not None
+        ):
+            # not known locally yet: ask the remote machine, once
+            self.state = state = self.describe(executor)
+        return state
+
+    def set_platform_state(self, executor: Executor, state: dict) -> None:
         if executor.platform is not None:
-            super().restore_platform(executor, state)
+            super().set_platform_state(executor, state)
         else:
             # the remote platform state, sent along with every acquisition
             self.state = state

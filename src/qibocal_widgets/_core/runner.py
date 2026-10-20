@@ -49,8 +49,8 @@ class Runner:
             return None
         return platforms.state(executor.platform)
 
-    def restore_platform(self, executor: Executor, state: platforms.State) -> None:
-        """Continue from a recorded calibration state (e.g. attaching a session)."""
+    def set_platform_state(self, executor: Executor, state: platforms.State) -> None:
+        """Apply a calibration state (e.g. attaching a session, or edited)."""
         if executor.platform is not None:
             platforms.apply(executor.platform, state)
 

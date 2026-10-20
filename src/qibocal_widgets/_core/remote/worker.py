@@ -293,7 +293,12 @@ def update(job: dict) -> dict:
     return {"state": state(created)}
 
 
-ACTIONS = {"acquire": acquire, "update": update}
+def describe(job: dict) -> dict:
+    """The calibration state of the platform, without connecting it."""
+    return {"state": state(platform(job))}
+
+
+ACTIONS = {"acquire": acquire, "update": update, "describe": describe}
 
 
 # -- entry point ---------------------------------------------------------------

@@ -157,7 +157,7 @@ class Session:
         """
         state = self.platform_state()
         if state is not None:
-            executor.runner.restore_platform(executor, state)
+            executor.runner.set_platform_state(executor, state)
 
     # -- notes -----------------------------------------------------------------
 
