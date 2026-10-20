@@ -8,7 +8,6 @@ the JSON and NPZ files written by their ``save`` methods.
 from __future__ import annotations
 
 import dataclasses
-import importlib
 import json
 import tempfile
 from pathlib import Path
@@ -16,6 +15,7 @@ from typing import Any
 
 from qibocal.auto.operation import BoundProtocol, Protocol
 
+from ..protocols import reference
 from . import worker
 from .transport import RemoteError
 
@@ -26,9 +26,6 @@ __all__ = [
     "protocol_reference",
     "update_job",
 ]
-
-PROTOCOLS = "qibocal.protocols"
-"""Module of the built-in protocols, searched first."""
 
 
 def protocol_reference(protocol: Protocol) -> str:
@@ -43,22 +40,14 @@ def protocol_reference(protocol: Protocol) -> str:
         RemoteError: for protocols which cannot be imported by reference, e.g.
             defined in a notebook cell.
     """
-    candidates = [PROTOCOLS, getattr(protocol.acquisition, "__module__", None)]
-    for name in candidates:
-        if name is None or name == "__main__":
-            continue
-        try:
-            module = importlib.import_module(name)
-        except ImportError:
-            continue
-        for attribute, value in vars(module).items():
-            if value is protocol:
-                return f"{name}:{attribute}"
-    raise RemoteError(
-        "Remote execution requires protocols importable by reference: define "
-        "the protocol at the top level of an importable module, and list its "
-        "package in the connection requirements"
-    )
+    found = reference(protocol)
+    if found is None:
+        raise RemoteError(
+            "Remote execution requires protocols importable by reference: define "
+            "the protocol at the top level of an importable module, and list its "
+            "package in the connection requirements"
+        )
+    return found
 
 
 def _jsonable(obj: Any) -> Any:
