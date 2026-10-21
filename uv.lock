@@ -2134,6 +2134,8 @@ dev = [
 ]
 docs = [
     { name = "furo" },
+    { name = "ipykernel" },
+    { name = "nbconvert" },
     { name = "sphinx", version = "9.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "sphinx", version = "9.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "sphinx-copybutton" },
@@ -2165,6 +2167,8 @@ dev = [
 ]
 docs = [
     { name = "furo", specifier = ">=2025.7.19,<2026.0.0" },
+    { name = "ipykernel", specifier = ">=6.29.0,<8.0.0" },
+    { name = "nbconvert", specifier = ">=7.16.0,<8.0.0" },
     { name = "sphinx", specifier = ">=9.0.0,<10.0.0" },
     { name = "sphinx-copybutton", specifier = ">=0.5.1,<0.6.0" },
 ]

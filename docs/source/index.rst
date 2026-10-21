@@ -35,6 +35,7 @@ helper call.
     getting-started/quickstart
     getting-started/remote
     getting-started/platform
+    examples
 
 .. toctree::
     :maxdepth: 2

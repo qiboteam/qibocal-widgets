@@ -38,6 +38,23 @@ path also accepts:
 - any text quoting a path, such as a pasted API call or its output
   (``state["parameters.configs.0/drive.frequency"]``).
 
+For instance, on Qibocal's ``mock`` platform:
+
+.. doctest::
+
+    >>> from qibocal import create_calibration_platform
+    >>> from qibocal_widgets import PlatformState
+    >>> state = PlatformState.of(create_calibration_platform("mock"))
+    >>> state["parameters.configs.0/drive.frequency"]
+    4000000000.0
+    >>> state.resolve("configs.0/drive.frequency")
+    'parameters.configs.0/drive.frequency'
+    >>> state.resolve('executor.platform_state["calibration.single_qubits.0.qubit.frequency_01"]')
+    'calibration.single_qubits.0.qubit.frequency_01'
+    >>> state.update({"configs.0/drive.frequency": 4.1e9})
+    >>> state["configs.0/drive.frequency"]
+    4100000000.0
+
 Updates
 -------
 

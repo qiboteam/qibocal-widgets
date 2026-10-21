@@ -41,6 +41,9 @@ docs = [
   "sphinx>=9.0.0,<10.0.0",
   "furo>=2025.7.19,<2026.0.0",
   "sphinx-copybutton>=0.5.1,<0.6.0",
+  # executing and exporting the examples
+  "nbconvert>=7.16.0,<8.0.0",
+  "ipykernel>=6.29.0,<8.0.0",
 ]
 dev = [
   "ipykernel>=6.0.0",
@@ -76,9 +79,20 @@ lint-warnings = """
            RET,SLF,SLOT,SIM,TC,INT,ARG,PTH,ERA,NPY,PERF,RUF
 """
 types = "true"
-docs = "make -C docs html"
+docs = ["examples", "docs-html"]
+docs-html = "make -C docs html"
 docs-clean = "make -C docs clean"
 test-docs = "make -C docs doctest"
+
+# executed on Qibocal's mock platform, vendored for the tests
+[tool.poe.tasks.examples]
+help = "Execute the examples, and export them to HTML for the documentation"
+sequence = [
+  { cmd = "marimo export html examples/marimo_ramsey.py -o docs/source/_extra/examples/marimo_ramsey.html -f" },
+  { cmd = "jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=300 --output-dir docs/source/_extra/examples examples/jupyter_ramsey.ipynb" },
+]
+# docs/hooks: see its sitecustomize.py, about qibolab's signal handlers
+env = { QIBOLAB_PLATFORMS = "${POE_ROOT}/tests/platforms", PYTHONPATH = "${POE_ROOT}/docs/hooks" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests/"]

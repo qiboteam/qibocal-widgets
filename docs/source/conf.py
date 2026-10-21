@@ -3,6 +3,8 @@
 # For the full list of options, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+from pathlib import Path
+
 import qibocal_widgets
 
 # -- Project information -----------------------------------------------------
@@ -63,7 +65,18 @@ html_theme_options = {
 }
 
 html_static_path = ["_static"]
+# executed examples, exported by `poe examples`
+html_extra_path = ["_extra"]
 html_show_sourcelink = False
+
+
+# -- Doctests ----------------------------------------------------------------
+
+# examples run on Qibocal's mock platform, vendored for the tests
+doctest_global_setup = f"""
+import os
+os.environ["QIBOLAB_PLATFORMS"] = {str(Path(__file__).parents[2] / "tests" / "platforms")!r}
+"""
 
 
 # -- Intersphinx -------------------------------------------------------------

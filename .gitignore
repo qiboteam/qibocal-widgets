@@ -152,3 +152,4 @@ htmlcov/
 
 # Sphinx build
 docs/build/
+docs/source/_extra/
