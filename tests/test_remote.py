@@ -83,6 +83,8 @@ with open(os.environ["FAKE_LOG"], "a") as log:
 @pytest.fixture
 def cluster(tmp_path, monkeypatch):
     """Fake cluster tools on PATH, and an environment with Qibocal."""
+    if sys.platform == "win32":
+        pytest.skip("the fake cluster tools are POSIX executables")
     bin = tmp_path / "bin"
     bin.mkdir()
     executable(bin / "ssh", FAKE_SSH)
@@ -449,7 +451,8 @@ def test_install_pip_fallback(tmp_path, monkeypatch):
     )
     assert outcome["installed"]
     assert commands[0] == ["/usr/bin/python3.12", "-m", "venv", str(env)]
-    assert commands[1][:4] == [str(env / "bin" / "python"), "-m", "pip", "install"]
+    python = str(worker.environment_python(env))
+    assert commands[1][:4] == [python, "-m", "pip", "install"]
 
 
 def test_session_records_remote(cluster, tmp_path):
