@@ -177,16 +177,18 @@ def test_command_tiers():
     assert local[:3] == ["python3", "-u", "-c"]
 
     access = transport.command(Connection(queue="qpu", slurm="--time=5"), compute=True)
-    assert access[:7] == [
+    assert access[:9] == [
         "srun",
         "--unbuffered",
         "--partition",
         "qpu",
+        "--job-name",
+        "qibocal-widgets-step",
         "--time=5",
         "--nodes=1",
         "--ntasks=1",
     ]
-    assert access[7] == "python3"
+    assert access[9] == "python3"
     # steps without instruments skip the queue
     assert transport.command(Connection(queue="qpu"), compute=False)[0] == "python3"
 
@@ -295,6 +297,8 @@ def test_laptop_tier(bound, cluster, mock_frequency):
             "--unbuffered",
             "--partition",
             "chip",
+            "--job-name",
+            "qibocal-widgets-acquire",
             "--time=5",
             "--nodes=1",
             "--ntasks=1",

@@ -10,7 +10,7 @@ from qibocal.auto.operation import BoundProtocol, Parameters
 from qibocal.auto.task import Completed
 
 from ..runner import Runner
-from . import jobs, transport
+from . import jobs, queue, transport
 from .config import CONNECTION_VARIABLE, Connection, load_connection
 
 if TYPE_CHECKING:
@@ -93,6 +93,50 @@ class Remote(Runner):
 
     def platform_name(self, executor: Executor) -> str | None:
         return self.connection.platform or super().platform_name(executor)
+
+    def queue(
+        self,
+        *,
+        partition: str | None = None,
+        user: str | None = None,
+        states: list[str] | None = None,
+        timeout: float = 30.0,
+    ) -> dict:
+        """The SLURM queue of the connection, asked once.
+
+        By default, the whole partition the acquisitions are submitted to, so
+        that the jobs ahead are visible; the jobs of the remote user are
+        flagged as ``mine``, those of this runner as ``ours``. The query and
+        its fields are the ones of qibocal-report.
+
+        Args:
+            partition: defaults to the ``queue`` of the connection.
+            user: restrict to the jobs of a user.
+            states: restrict to some job states (e.g. ``["PENDING"]``).
+            timeout: seconds to wait for the answer.
+        """
+        return queue.query(
+            self.connection,
+            partition=partition,
+            user=user,
+            states=states,
+            timeout=timeout,
+        )
+
+    def monitor(self, *, interval: float = 30.0, mine: bool = False, **options):
+        """A refreshable view of the queue, for Jupyter and Marimo.
+
+        Args:
+            interval: seconds between automatic refreshes, while displayed;
+                ``0`` refreshes only on request.
+            mine: show only the jobs of the remote user.
+            **options: forwarded to :meth:`queue`.
+
+        Requires ``anywidget`` (in the ``jupyter`` and ``marimo`` extras).
+        """
+        from .monitor import QueueMonitor
+
+        return QueueMonitor(self, interval=interval, mine=mine, **options)
 
     def describe(self, executor: Executor) -> dict:
         """The calibration state of the remote platform, as found remotely.

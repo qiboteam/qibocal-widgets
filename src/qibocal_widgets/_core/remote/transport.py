@@ -28,6 +28,9 @@ SSH_OPTIONS = [
 ]
 """Options of every SSH connection: no terminal, no interactive prompt."""
 
+JOB_PREFIX = "qibocal-widgets-"
+"""Name prefix of the queued jobs, followed by their action."""
+
 FORBIDDEN_SLURM = {
     "-o",
     "--output",
@@ -93,20 +96,32 @@ def _workdir(path: str) -> str:
     return f"cd {shlex.quote(path)}"
 
 
-def command(connection: Connection, *, compute: bool) -> list[str]:
+def command(
+    connection: Connection, *, compute: bool, action: str = "step"
+) -> list[str]:
     """Command line running the worker.
 
     Args:
         connection: how to reach the remote machine.
         compute: whether the step needs the instruments, in which case it goes
             through the queue when one is configured.
+        action: the job action, naming queued jobs (``qibocal-widgets-<action>``)
+            unless the ``slurm`` options set a name, so that they can be
+            recognized in the queue.
     """
     inner = ["python3", "-u", "-c", source()]
     if compute and connection.scheduled:
         srun = ["srun", "--unbuffered"]
         if connection.queue is not None:
             srun += ["--partition", connection.queue]
-        srun += slurm_arguments(connection.slurm)
+        extra = slurm_arguments(connection.slurm)
+        named = any(
+            argument == "-J" or argument.split("=", 1)[0] == "--job-name"
+            for argument in extra
+        )
+        if not named:
+            srun += ["--job-name", f"{JOB_PREFIX}{action}"]
+        srun += extra
         srun += ["--nodes=1", "--ntasks=1"]
         inner = srun + inner
     if connection.ssh is None:
@@ -133,7 +148,7 @@ def run(connection: Connection, job: dict, *, compute: bool) -> dict:
     job = {"venv": connection.venv, **job}
     try:
         process = subprocess.run(
-            command(connection, compute=compute),
+            command(connection, compute=compute, action=job["action"]),
             input=json.dumps(job),
             capture_output=True,
             text=True,
