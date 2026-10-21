@@ -14,7 +14,8 @@ documentation, and workflows reusing `qiboteam/workflows@uv`.
   - `poe examples` (part of `poe docs`) executes both example notebooks on the
     vendored mock platform, and exports them with their outputs (`marimo export
     html`, `jupyter nbconvert --execute`, with the widget state embedded); the
-    *Examples* page links them.
+    *Examples* page links them. On GitHub's runners the whole documentation
+    build, examples included, takes under a minute, and the pages are live.
   - The platform state guide contains doctests on the mock platform, run by
     `poe test-docs`, enabled in the test workflow on Linux.
 - **Wheels**: built on every push by `wheels.yml` (publishing disabled, see
@@ -28,7 +29,9 @@ documentation, and workflows reusing `qiboteam/workflows@uv`.
   to 86%.
 - **Windows** is in the test matrix. The tests relying on the POSIX fake
   cluster tools (`sh` scripts and symbolic links on `PATH`) are skipped there;
-  everything else, including the notes lock, runs.
+  everything else, including the notes lock, runs. The first Windows run found
+  one non-portable test (a path compared as a string), since fixed; macOS
+  passed on all Python versions.
 - **Release hygiene**: `CHANGELOG.md`, in the Keep a Changelog format, with
   the unreleased changes.
 - **pre-commit.ci settings** (`ci:` in `.pre-commit-config.yaml`): autofix,
@@ -37,10 +40,13 @@ documentation, and workflows reusing `qiboteam/workflows@uv`.
 ## Pending actions (repository administrators)
 
 - **Codecov token**: the reusable test action fails on Linux when the
-  coverage upload fails. The repository has no `CODECOV_TOKEN` secret; if no
-  organization-level one is inherited, add it. The automatic triggers of
-  `tests.yml` are restored only once the upload succeeds (see the test run
-  results recorded below).
+  coverage upload fails, and a manually dispatched run showed that no token is
+  available: the repository has no `CODECOV_TOKEN` secret, none is inherited
+  from the organization (*token length: 0*), and Codecov rejects tokenless
+  uploads (*Token required - not valid tokenless upload*). All the tests and
+  doctests pass in that run; only the upload fails. Add the secret, then
+  restore the `push`, `merge_group`, and `pull_request` triggers of
+  `tests.yml`, commented out until then.
 - **pre-commit.ci**: enable the app on the repository, as for the other Qibo
   projects; the configuration is ready.
 
@@ -77,5 +83,7 @@ documentation).
   interrupting cells in live notebooks: worth raising upstream, in qibolab.
 - **Kernel messaging in sandboxed environments**: executing the Jupyter
   example occasionally stalls for minutes in some sandboxed environments (the
-  kernel idle, its messages delayed). `nbconvert` runs with a per-cell timeout,
-  so that a stall fails the build instead of hanging it.
+  kernel idle, its messages delayed over local TCP; IPC transport is
+  consistently slower). It never happened on GitHub's runners. `nbconvert`
+  runs with a per-cell timeout, so that a stall fails the build instead of
+  hanging it.

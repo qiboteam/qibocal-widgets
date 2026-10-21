@@ -2,6 +2,7 @@
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 from conftest import PLATFORMS, TARGETS
@@ -62,7 +63,8 @@ def test_create_defaults_to_reports(session, mock):
 def test_explicit_path_wins(session, mock):
     executor = Executor.create(path="var/report", platform="mock")
     # unchanged meaning: relative to the working directory
-    assert str(executor.path) == "var/report"
+    assert executor.path == Path("var/report")
+    assert not executor.path.is_absolute()
 
 
 def test_create_without_path_nor_reports(mock):
