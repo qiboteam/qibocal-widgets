@@ -1,7 +1,8 @@
 # Packaging, CI, documentation
 
-Status: partly implemented; some actions pending. The repository has a `uv`
-package, tests, documentation, and workflows reusing `qiboteam/workflows@uv`.
+Status: mostly implemented; publishing waits for Qibocal, and two repository
+settings need an administrator. The repository has a `uv` package, tests,
+documentation, and workflows reusing `qiboteam/workflows@uv`.
 
 ## Done
 
@@ -9,54 +10,72 @@ package, tests, documentation, and workflows reusing `qiboteam/workflows@uv`.
   theme, built by `poe docs` and published by `docs.yml` through the reusable
   `latest-stable.yml` workflow (`latest` from `main`, `stable` from tags), live
   at <https://qibo.science/qibocal-widgets/latest/>.
+- **Executable documentation**:
+  - `poe examples` (part of `poe docs`) executes both example notebooks on the
+    vendored mock platform, and exports them with their outputs (`marimo export
+    html`, `jupyter nbconvert --execute`, with the widget state embedded); the
+    *Examples* page links them.
+  - The platform state guide contains doctests on the mock platform, run by
+    `poe test-docs`, enabled in the test workflow on Linux.
 - **Wheels**: built on every push by `wheels.yml` (publishing disabled, see
   below), including the explorer's browser assets.
 - **Real protocols in tests**: Qibocal's `mock` platform is vendored under
   `tests/platforms`; remote, session, and platform state tests run the
   built-in `ramsey_signal` on it.
+- **Worker coverage**: the remote worker runs inline in subprocesses, where
+  coverage cannot attribute it to its file; its actions are also tested
+  in-process (`tests/test_worker.py`), raising its measured coverage from 47%
+  to 86%.
+- **Windows** is in the test matrix. The tests relying on the POSIX fake
+  cluster tools (`sh` scripts and symbolic links on `PATH`) are skipped there;
+  everything else, including the notes lock, runs.
+- **Release hygiene**: `CHANGELOG.md`, in the Keep a Changelog format, with
+  the unreleased changes.
+- **pre-commit.ci settings** (`ci:` in `.pre-commit-config.yaml`): autofix,
+  monthly hook updates.
 
-## Pending actions
+## Pending actions (repository administrators)
 
-- **Test workflow triggers**: the automatic triggers of `tests.yml` are
-  commented out, since the reusable test action fails when the Codecov upload
-  fails. The repository has no `CODECOV_TOKEN` secret: check whether an
-  organization-level one is available (as for other Qibo projects), or add
-  one, then restore the `push`, `merge_group`, and `pull_request` triggers.
-- **Pre-commit**: `.pre-commit-config.yaml` mirrors Qibocal's; enable
-  `pre-commit.ci` on the repository as the other Qibo projects do.
+- **Codecov token**: the reusable test action fails on Linux when the
+  coverage upload fails. The repository has no `CODECOV_TOKEN` secret; if no
+  organization-level one is inherited, add it. The automatic triggers of
+  `tests.yml` are restored only once the upload succeeds (see the test run
+  results recorded below).
+- **pre-commit.ci**: enable the app on the repository, as for the other Qibo
+  projects; the configuration is ready.
 
 ## Remaining
 
 ### Dependency on unreleased Qibocal
 
 `pyproject.toml` declares `qibocal>=0.2.7` and pins the `protodev` branch
-through `[tool.uv.sources]`. A wheel installed from PyPI would resolve to the
-released Qibocal, which lacks the executor interface.
+through `[tool.uv.sources]`, deliberately kept until Qibocal releases the
+executor interface. A wheel installed from PyPI would resolve to the released
+Qibocal, which lacks it.
 
-- Keep `publish: false` in `wheels.yml` until Qibocal ships the interface.
-- Then bump the lower bound to that release, and enable publishing on GitHub
-  releases (`publish` condition and `PYPI_TOKEN` secret as in Qibocal).
+- Keep `publish: false` in `wheels.yml` until then.
+- Then bump the lower bound to that release, drop the source pin, and enable
+  publishing on GitHub releases (`publish` condition and `PYPI_TOKEN` secret
+  as in Qibocal).
 - Meanwhile, consumers install from git.
 
-### Test matrix
+### Release process
 
-- Windows is excluded. Besides the Qibocal git dependency, the remote tests
-  rely on POSIX fake executables (`sh` scripts and symbolic links on `PATH`);
-  they would need a Windows variant, or to be skipped there. The notes lock
-  already supports Windows.
-- The remote worker runs in subprocesses, so its coverage is not measured;
-  enable subprocess coverage collection.
+When publishing becomes possible: bump the static version in `pyproject.toml`,
+move the *Unreleased* changelog entries under the new version, tag, and
+publish a GitHub release (which triggers the wheel upload and the `stable`
+documentation).
 
-### Executable documentation
+## Known issues
 
-- Render the examples in the documentation: the Marimo one with `marimo export
-  html`, the Jupyter one with `nbsphinx` or `myst-nb`, both on the vendored mock
-  platform.
-- Enable `test-docs` (doctests) in the test workflow once the documentation
-  contains runnable examples.
-
-### Release hygiene
-
-- Version is static in `pyproject.toml`; adopt Qibocal's bump process (manual
-  bump and GitHub release).
-- Add a `CHANGELOG.md` with the first release.
+- **qibolab signal handlers**: creating a qibolab platform replaces the
+  process-wide `SIGINT` and `SIGTERM` handlers (to disconnect instruments when a
+  job is cancelled). Marimo relies on those signals to shut its runtime down,
+  so `marimo export html` hangs on notebooks creating a platform; the
+  documentation build neutralizes the handlers for the mock platform through
+  `docs/hooks/sitecustomize.py`. The same replacement may interfere with
+  interrupting cells in live notebooks: worth raising upstream, in qibolab.
+- **Kernel messaging in sandboxed environments**: executing the Jupyter
+  example occasionally stalls for minutes in some sandboxed environments (the
+  kernel idle, its messages delayed). `nbconvert` runs with a per-cell timeout,
+  so that a stall fails the build instead of hanging it.

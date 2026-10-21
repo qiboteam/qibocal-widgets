@@ -1,3 +1,8 @@
+# settings for pre-commit.ci, once enabled on the repository
+ci:
+  autofix_prs: true
+  autoupdate_schedule: monthly
+
 # exclude automatically generated files
 exclude: '(?x)^(.*\.lock|.*\.ipynb)$'
 

@@ -1,0 +1,30 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+First development version, targeting the executor interface of Qibocal's
+`protodev` branch.
+
+### Added
+
+- `Executor`, a drop-in replacement of `qibocal.Executor`, composed of a
+  runner, middleware, and frontends.
+- `Marimo` and `Jupyter` frontends, displaying executions with no helper call
+  (raw data, per-target reports, folded fit tables), with explicit
+  `show_data`, `show_reports`, and `wrap` helpers.
+- Remote execution (`qibocal_widgets.remote.Remote`): acquisitions dispatched
+  through SLURM and SSH, with JSON and NPZ jobs, named connections shared with
+  qibocal-report, and separately installed environments.
+- Session folders: every execution recorded and appended in Qibocal's output
+  layout, readable by Qibocal and qibocal-report; `new_session()`,
+  `Executor.attach()`, platform states, and notes.
+- Default output location from the session's reports folder
+  (`QIBOCAL_REPORTS_DIR`), and `reports_dir()`.
+- `PlatformState`: platform parameters and calibration by path, with an
+  interactive explorer for Jupyter and Marimo.
+- Documentation, with the examples executed on Qibocal's mock platform.
