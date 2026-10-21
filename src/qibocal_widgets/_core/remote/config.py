@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import tempfile
 from pathlib import Path
@@ -26,6 +27,7 @@ __all__ = [
     "IncompatibleConfig",
     "config_path",
     "connections",
+    "environment_name",
     "load_connection",
     "remove_connection",
     "save_connection",
@@ -146,9 +148,24 @@ def _write(raw: dict) -> None:
     Path(file.name).replace(path)
 
 
+def environment_name(name: str) -> str:
+    """The environment a named connection uses, unless it names one.
+
+    Its name made safe for a folder, under ``_remote/``: distinct connections,
+    and notebook sessions of the same name, do not share one unless it is
+    named on purpose. The same rule as qibocal-report's launcher.
+    """
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", name).lstrip("-._").rstrip("-.")
+    return f"_remote/{safe or 'qibocal'}"
+
+
+def _connection(name: str, raw: dict) -> Connection:
+    return Connection(**{"venv": environment_name(name), **raw})
+
+
 def connections() -> dict[str, Connection]:
     """All the named connections in the configuration file."""
-    return {name: Connection(**raw) for name, raw in _read().items()}
+    return {name: _connection(name, raw) for name, raw in _read().items()}
 
 
 def load_connection(name: str) -> Connection:
@@ -160,13 +177,21 @@ def load_connection(name: str) -> Connection:
     raw = _read()
     if name not in raw:
         raise KeyError(f"No connection named {name!r} in {config_path()}")
-    return Connection(**raw[name])
+    return _connection(name, raw[name])
 
 
 def save_connection(name: str, connection: Connection) -> None:
     """Add or replace a named connection in the configuration file."""
     raw = _read()
-    raw[name] = connection.model_dump(exclude_defaults=True)
+    stored = connection.model_dump(exclude_defaults=True)
+    # Its own environment is implied by its name: only another one is stored.
+    if "venv" not in connection.model_fields_set or connection.venv == environment_name(
+        name
+    ):
+        stored.pop("venv", None)
+    else:
+        stored["venv"] = connection.venv
+    raw[name] = stored
     _write(raw)
 
 

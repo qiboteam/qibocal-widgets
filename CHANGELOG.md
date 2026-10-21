@@ -12,6 +12,8 @@ First development version, targeting the executor interface of Qibocal's
 
 ### Added
 
+- A named remote connection has an environment of its own by default,
+  `_remote/<name>`, as qibocal-report's launcher resolves it.
 - `Executor`, a drop-in replacement of `qibocal.Executor`, composed of a
   runner, middleware, and frontends.
 - `Marimo` and `Jupyter` frontends, displaying executions with no helper call

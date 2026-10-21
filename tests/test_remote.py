@@ -27,6 +27,7 @@ from qibocal_widgets.remote import (
     RemoteError,
     config_path,
     connections,
+    environment_name,
     load_connection,
     remove_connection,
     save_connection,
@@ -126,8 +127,10 @@ def test_config_roundtrip():
     assert connections() == {}
     lab = Connection(ssh="me@login", queue="qpu", platform="chip")
     save_connection("lab", lab)
-    assert load_connection("lab") == lab
-    assert connections() == {"lab": lab}
+    # a named connection has an environment of its own, implied by its name
+    own = lab.model_copy(update={"venv": "_remote/lab"})
+    assert load_connection("lab") == own
+    assert connections() == {"lab": own}
     content = json.loads(config_path().read_text())
     # only non-default fields are stored, in qibocal-report's versioned layout
     assert content == {
@@ -136,6 +139,22 @@ def test_config_roundtrip():
     }
     remove_connection("lab")
     assert connections() == {}
+
+
+def test_config_environment():
+    assert environment_name("QW5Q lab") == "_remote/QW5Q-lab"
+    assert environment_name("***") == "_remote/qibocal"
+    save_connection("lab", Connection(venv="qibocal"))
+    save_connection(
+        "own", load_connection("lab").model_copy(update={"venv": "_remote/own"})
+    )
+    content = json.loads(config_path().read_text())["connections"]
+    # sharing one is a choice, kept; its own is implied
+    assert content == {"lab": {"venv": "qibocal"}, "own": {}}
+    assert load_connection("lab").venv == "qibocal"
+    assert Remote("own").connection.venv == "_remote/own"
+    assert Remote("own", venv="other").connection.venv == "other"
+    assert Remote().connection.venv == "qibocal"
 
 
 def test_config_missing_connection():
@@ -160,8 +179,10 @@ def test_connection_validation():
 def test_remote_options(monkeypatch):
     save_connection("lab", Connection(ssh="me@login", queue="qpu"))
     remote = Remote("lab", queue="other")
-    assert remote.connection == Connection(ssh="me@login", queue="other")
-    assert repr(remote) == "Remote(ssh='me@login', queue='other')"
+    assert remote.connection == Connection(
+        ssh="me@login", queue="other", venv="_remote/lab"
+    )
+    assert repr(remote) == "Remote(ssh='me@login', queue='other', venv='_remote/lab')"
     # selected through the environment, to keep notebooks unchanged across tiers
     monkeypatch.setenv("QIBOCAL_WIDGETS_CONNECTION", "lab")
     assert Remote().connection.queue == "qpu"

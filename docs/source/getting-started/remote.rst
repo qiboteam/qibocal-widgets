@@ -98,8 +98,12 @@ launcher can manage them as well. SSH host aliases and jump hosts from
 Environments and protocols
 --------------------------
 
-Remote steps run in a Python environment on the remote machine, by default
-``~/.cache/qibocal/envs/qibocal``, the same location used by qibocal-report.
+Remote steps run in a Python environment on the remote machine, under
+``~/.cache/qibocal/envs``, the same location used by qibocal-report. A named
+connection has one of its own by default, named after it under ``_remote/``
+(``lab`` uses ``~/.cache/qibocal/envs/_remote/lab``), shared with no other
+connection nor notebook session unless ``venv`` names it on purpose; a
+connection given inline uses ``qibocal``.
 Installing it is a separate operation, never performed by the steps:
 
 .. code-block:: python
