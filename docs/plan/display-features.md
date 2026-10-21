@@ -1,78 +1,78 @@
 # Richer display of executions
 
-Status: proposal. Extends what `display(completed)` shows, keeping the
-"no explicit invocation" principle.
+Status: proposals. Extends what frontends show, keeping the "no explicit
+invocation" principle. New renderings belong to the frontends (`Marimo`,
+`Jupyter`), on top of frontend-agnostic extraction in the core, as the current
+data and report views.
 
-## 1. Results section
+## Done
 
-`Completed.results` is currently left to the frontend's default repr. Qibocal
-`Results` are dataclasses whose fields are mostly `dict[target, value]`
-(values being scalars, `(value, error)` tuples, or small arrays).
+- **Display without helpers**, for Marimo and Jupyter, coexisting on the same
+  execution (see [architecture.md](architecture.md)).
+- **Reports first**: the *Reports* tab is selected when available, single
+  targets start expanded, and the fit table is folded above the plots.
+- **Loading from disk**: `Executor.load(path)` returns a displayable execution,
+  and `Executor.attach(path)` continues a session folder.
 
-- Core: `results_frame(results) -> DataFrame` with one row per target and one
-  column per field, flattening `(value, error)` into `value` / `error`
-  columns, and leaving arrays as cell objects (or expanding them into a
-  per-target sub-table when 1-D).
-- Frontends: a "Results" tab between "Data" and "Reports", hidden when the fit
-  phase did not run. `completed.show_results()` as explicit helper.
+## Remaining
 
-## 2. Execution summary header
+### 1. Results section
 
-A compact line above the tabs: protocol name (`bound.protocol` function names
-or `protocol_id`), targets, acquisition and fit durations (`data_time`,
-`results_time`), success flag. Cheap and useful when scrolling through a long
-notebook.
+`Completed.results` is left to the frontend's default representation; the
+fitted values only appear in the protocol's report table. Qibocal `Results`
+are dataclasses whose fields are mostly `dict[target, value]` (scalars,
+`(value, error)` pairs, or small arrays).
 
-## 3. Parameters
+- Core: `results_frame(results) -> DataFrame`, one row per target and one
+  column per field, flattening `(value, error)` into two columns.
+- Frontends: a *Results* tab between *Data* and *Reports*, omitted when the fit
+  did not run.
 
-Render `bound.parameters` (acquisition), `bound.fitpars`, `bound.reportpars` as
-a key/value table, so an execution is self-describing. Combined with the
-summary this turns the cell output into a complete record of the experiment.
+### 2. Execution summary and parameters
 
-## 4. Widget-free HTML fallback (Jupyter)
+A compact header above the tabs: protocol name, targets, acquisition and fit
+durations (`data_time`, `results_time`), success, and the session task id when
+recorded (`data/<id>-<iteration>`). The executed parameters (`bound.parameters`,
+including `nshots` and `relaxation_time`), folded by default, make each cell
+output a complete record of the experiment.
 
-The `Jupyter` frontend currently needs `ipywidgets`. Provide a view returning a
-`text/html` bundle (pandas `to_html`, Plotly `to_html(full_html=
-False, include_plotlyjs="cdn")`, `<details>` elements as accordion) so that:
+### 3. Session browser
 
-- static exports (`nbconvert`, GitHub rendering, Sphinx `nbsphinx`) keep the
-  content;
-- the `jupyter` extra can drop the hard dependency on `ipywidgets` (kept as
-  optional enhancement).
+The session folder is the natural history of a notebook: displaying
+`executor.session` (or any `Session.attach(path)`) lists the recorded tasks
+(`history.json`, timings from `meta.json`, notes), and expands each into the
+full display of its execution, loaded lazily with `Completed.load`. This also
+makes widgets usable for post-processing, with no platform at all. Replaces
+the earlier idea of a browser over `Executor.history`, which sessions
+superseded.
 
-A `Jupyter(widgets=False)` frontend option picks the renderer.
+### 4. Widget-free HTML fallback (Jupyter)
 
-## 5. Opt-in formatter registration (Jupyter)
+The `Jupyter` frontend needs `ipywidgets`, so static exports (`nbconvert`,
+GitHub rendering, Sphinx `nbsphinx`) lose the content. A view returning a
+`text/html` bundle (pandas `to_html`, Plotly `to_html(full_html=False,
+include_plotlyjs="cdn")`, `<details>` elements as accordions) would keep it;
+a `Jupyter(widgets=False)` option picks the renderer.
 
-`qibocal_widgets.jupyter.register()` registering an IPython formatter for the
-plain `qibocal.auto.task.Completed`, for users who prefer the stock executor.
-See the alternatives discussion in [architecture.md](architecture.md).
-
-## 6. History browser
-
-`Executor.history` collects every execution of a session. A
-`show_history(executor)` widget (or making the `Executor` itself
-displayable) lists executions with summary rows and expands into the full
-display on click. In Marimo this is a `mo.ui.table` with row selection driving
-a second cell; in Jupyter a `Select` widget driving an `Output`.
-
-## 7. Comparison of executions
+### 5. Comparison of executions
 
 Overlay the figures of two executions of the same protocol (e.g. before and
-after an update) on the same axes, per target. Requires a convention for
-"same quantity" across figures; a first version can simply stack them side by
-side with shared titles.
+after an update) on the same axes, per target. A first version can stack them
+side by side; sessions provide the natural pairs (iterations of the same task
+id).
 
-## 8. Loading reports from disk
+### 6. Custom renderers per data type
 
-`Executor.load(path)` exists; add a `qibocal_widgets.load(path,
-frontend=...)` convenience and the ability to browse an output folder
-(`Output.load`) as a history, so widgets are usable for post-processing with
-no platform at all.
-
-## 9. Custom renderers per data type
-
-Allow protocols (or users) to register a `(DataType) -> DataFrame` or
+Let protocols (or users) register a `(DataType) -> DataFrame` or
 `(Completed) -> displayable` override, for data layouts the generic tabulation
-does not handle well (2-D sweeps, randomized benchmarking sequences).
-Registration through a simple dictionary in the core, keyed by class.
+handles poorly (2-D sweeps, randomized benchmarking sequences): a dictionary in
+the core, keyed by class, consulted by the extraction functions.
+
+## Dropped
+
+- **Opt-in formatter registration for plain `qibocal.Completed`** (Jupyter
+  only): the executor and `wrap(completed)` already make any execution
+  displayable, in both frontends, without a global side effect; a
+  Jupyter-only path would split the two frontends for little gain.
+- **A separate `qibocal_widgets.load(path, frontend=...)`**: covered by
+  `Executor.load` and `Executor.attach`, and by the session browser above.

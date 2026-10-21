@@ -1,69 +1,40 @@
 # SLURM queue monitor
 
-Status: proposal. Labs often run Qibocal on a cluster node attached to the
-instruments, through a SLURM queue, while the notebook runs elsewhere. A set
-of widgets for submitting, following, and collecting those jobs would close
-the loop without leaving the notebook.
+Status: mostly superseded; one proposal remains. The original idea was a set
+of widgets to submit, follow, and collect Qibocal jobs on a SLURM queue from
+the notebook. Most of it is now covered by other pieces.
 
-## Scope
+## Superseded
 
-1. **Queue view**: the user's jobs (`squeue --me`) with state, partition,
-   node, elapsed time, auto-refreshing.
-2. **Job details**: `scontrol show job`, the tail of stdout/stderr, and for
-   Qibocal jobs the output folder with the executions dumped so far.
-3. **Submission**: turn a `BoundProtocol` (or a runcard) plus platform and
-   targets into a batch script, submit it, and track it.
-4. **Collection**: once a job finishes, load its output folder as a history
-   (see [display-features.md](display-features.md)) and display executions
-   with the same widgets used for local runs.
+- **Submission and collection of jobs**: the `Remote` runner dispatches each
+  step needing the instruments as a blocking `srun` job, optionally through
+  SSH, and records its outputs in the executor's session folder (see
+  [remote-executor.md](remote-executor.md)). No batch scripts, sidecar files,
+  or output conventions are needed.
+- **The open questions** of the original proposal are settled there: jobs are
+  described in JSON and NPZ (no pickle, no runcards), and SSH goes through
+  plain `ssh` with the user's configuration.
+- **Platform status widget**: the platform state explorer (#3), with
+  comparison against the start of the session.
+- **Calibration dashboard**: the report server of qibocal-report serves the
+  session folders, and shows the executions and their history.
+- **A queue backend in this package**: qibocal-report already reads the queue
+  (`squeue`, `sinfo`, over SSH: `qibocal notebook queue`) and shows it in its
+  launcher. A second implementation here would duplicate it.
 
-## Design
+## Remaining
 
-### Backend (`qibocal_widgets.slurm`, frontend-agnostic)
+### Queue view in the notebook
 
-- Thin wrappers over the SLURM CLI (`squeue`, `sacct`, `sbatch`, `scancel`,
-  `scontrol`) parsing their `--json` or `--parsable2` output into dataclasses.
-  No dependency on `pyslurm` (binary, version-bound).
-- Remote execution through an optional `ssh` transport (subprocess over
-  `ssh host`), since the notebook may not run on a login node. Keep the
-  transport pluggable: local, ssh, or a user-provided callable.
-- A `Job` dataclass with `id`, `name`, `state`, `elapsed`, `node`,
-  `output_path`, and `refresh()`.
-- Polling helper with a configurable interval; no daemon threads in the core.
+A compact, refreshable view of the user's jobs, for the connection of a
+`Remote` runner (`executor.runner.queue()`), useful while acquisitions wait in
+the queue. It should reuse qibocal-report's queue query (same command, same
+parsed fields), possibly moved to a package shared by both, rather than
+reimplement it. It becomes more relevant together with asynchronous remote
+jobs (follow-up of [remote-executor.md](remote-executor.md)), where pending
+executions could link to their job.
 
-### Frontends
+## Dropped
 
-- Marimo: `mo.ui.refresh` drives re-execution of the cell holding the table
-  (`mo.ui.table` with row selection); selecting a row shows details in a
-  dependent cell. Submission via a form (see
-  [interactive-execution.md](interactive-execution.md)).
-- Jupyter: `ipywidgets` `Select`/`HTML` updated by an `asyncio` task on the
-  kernel's event loop (not a thread), with start/stop buttons.
-
-### Qibocal job convention
-
-To recognise Qibocal jobs and locate their outputs, the submitter writes a
-small sidecar file (`<output>/job.json`) with the SLURM job id, platform,
-protocol, and targets, and names the job `qibocal:<protocol>`. The queue view
-reads sidecars from a configurable root to join queue entries with outputs.
-
-## Open questions
-
-- Authentication for the ssh transport in a notebook context (agent
-  forwarding vs. explicit keys).
-- Whether the submitted work is a bound protocol pickled to disk, a generated
-  Python script, or a Qibocal runcard executed by the `qq` command. The
-  runcard route is the most robust across Qibocal versions.
-- How much of this belongs in Qibocal itself (a `qibocal.slurm` module) versus
-  this package: the backend is frontend-free and could live upstream.
-
-## Other monitoring widgets in the same spirit
-
-- **Platform status**: connected instruments, LO frequencies, qubit
-  parameters (`platform.parameters`) as a table, with a diff view against the
-  last dumped platform.
-- **Calibration dashboard**: a grid of qubits coloured by freshness of the last
-  successful calibration of each protocol, from the history of an output
-  folder.
-- **Instrument health**: TWPA pump status, temperature logs when the lab
-  exposes them, as a periodically refreshed panel.
+- **Instrument health panel** (TWPA pump, temperatures): lab-specific, and
+  better served by the labs' own monitoring than by calibration notebooks.

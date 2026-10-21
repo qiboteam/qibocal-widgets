@@ -48,9 +48,16 @@ built-in protocols takes the platform.
 Jobs are independent: each one recreates the platform by name, then applies
 the current `parameters` and `calibration` JSON. The state comes from the
 local platform when the executor has one (updates are applied to it locally),
-otherwise from the state returned by the last remote update, kept by the
-runner. Verified: a changed drive frequency reaches a freshly created
-platform, which still connects.
+otherwise from the state kept by the runner: asked to the remote machine the
+first time it is needed (a `describe` job, on the access node, outside of the
+queue), then replaced by remote updates and by edits through
+`executor.platform_state`. Verified: a changed drive frequency reaches a
+freshly created platform, which still connects.
+
+Remote executions, and the platform state before and after updates, are
+recorded in the executor's session folder like local ones (see
+[architecture.md](architecture.md)); attaching a session hands its latest
+state back to the runner.
 
 ### Wire protocol
 
@@ -100,24 +107,29 @@ timeouts, unreachable hosts, missing environments, and unavailable protocols.
 
 ## Follow-ups
 
-1. **Launcher integration** (qibocal-report#53): a "Remote execution" section
-   editing `remotes.json`; the schema is meant to be shared, possibly moving
-   the connection model to a common package.
-2. ~~Report server on the same channel~~ and ~~persisting outputs~~: done
-   through sessions ([#4](https://github.com/qiboteam/qibocal-widgets/issues/4)):
-   remote executions are recorded in the executor's session folder (by
-   default under the reports folder served by qibocal-report, #2), platform
-   updates included.
-4. **Cancellation**: interrupting the kernel kills the local `ssh`/`srun`
+### Done
+
+- **Report server and persisted outputs**: remote executions are recorded in
+  the executor's session folder (#4), by default under the reports folder
+  served by qibocal-report (#2), platform updates included.
+- **Remote platform inspection**: the `describe` action returns the remote
+  platform state, explored with `executor.platform_state` (#3).
+
+### Remaining
+
+1. **Launcher integration**
+   ([qibocal-report#53](https://github.com/qiboteam/qibocal-report/issues/53)):
+   a *Remote execution* section editing `remotes.json`. The connection schema
+   is meant to be shared, possibly moving the connection model (and the queue
+   query, see [slurm-monitor.md](slurm-monitor.md)) to a package common to
+   both.
+2. **Cancellation**: interrupting the kernel kills the local `ssh`/`srun`
    process; check that the remote job is reliably cancelled (process groups,
    or `scancel` by job name).
-5. **Connection reuse**: one SSH connection per step; `ControlMaster`
+3. **Connection reuse**: one SSH connection per step; `ControlMaster`
    multiplexing would cut the latency of repeated steps.
-6. **Long queues**: a blocking `srun` keeps the notebook busy while queued.
-   An asynchronous mode (submitted job, future-like execution displayed as
-   pending, then completed) would pair with the
-   [SLURM monitor](slurm-monitor.md).
-7. **Remote platform inspection**: a `describe` action returning the current
-   remote platform parameters, for display without a local platform.
-8. **Coverage of the worker**: it runs in subprocesses, so its coverage is not
-   measured; enable subprocess coverage collection.
+4. **Long queues**: a blocking `srun` keeps the notebook busy while queued. An
+   asynchronous mode (submitted job, pending execution displayed as such, then
+   completed and recorded) shares its design with background execution, see
+   [interactive-execution.md](interactive-execution.md).
+5. **Worker coverage**: see [packaging-and-ci.md](packaging-and-ci.md).

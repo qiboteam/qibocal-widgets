@@ -1,6 +1,6 @@
 # Architecture
 
-Status: implemented (minimal viable product).
+Status: implemented.
 
 ## Goal
 
@@ -18,10 +18,12 @@ reported  # raw data + per-target reports
 
 ## How it works
 
-Three layers, with the frontends kept as thin as possible. All the
-implementation lives in the private `qibocal_widgets._core` subpackage; the
-public modules (`qibocal_widgets`, `qibocal_widgets.marimo`,
-`qibocal_widgets.jupyter`) only re-export from it, which a test enforces.
+All the implementation lives in the private `qibocal_widgets._core`
+subpackage; the public modules (`qibocal_widgets`, `qibocal_widgets.marimo`,
+`qibocal_widgets.jupyter`, `qibocal_widgets.remote`,
+`qibocal_widgets.explorer`) only re-export from it, which a test enforces.
+Frontends are kept as thin as possible, on top of frontend-agnostic
+extraction.
 
 ### 1. Extraction (`_core.data`, `_core.reports`)
 
@@ -50,12 +52,15 @@ of extensions with different semantics:
 | `frontends` (`Frontend`) | any | irrelevant | Marimo, Jupyter, HTML fallback, further tabs and renderers |
 
 - The **runner** does the actual work of every step. The base `Runner` calls
-  Qibocal's implementation for each step (`open`/`close` wrap
-  `Executor._init`/`close`, so both `with executor:` and the
-  `Executor.open(...)` classmethod go through it); a runner executing some
-  steps elsewhere overrides only those. Being a single slot, it needs no
-  conflict resolution, and runner-specific operations (`Remote.install()`)
-  have a natural home.
+  Qibocal's implementation for the protocol steps, and only connects and
+  disconnects the platform on `open`/`close` (reached by both `with
+  executor:` and the `Executor.open(...)` classmethod): the output folder
+  belongs to the session (section 5). A runner executing some steps elsewhere
+  overrides only those. Being a single slot, it needs no conflict resolution,
+  and runner-specific operations (`Remote.install()`, `Remote.describe()`)
+  have a natural home. Runners also own the platform state the steps run on
+  (`platform_state`, `set_platform_state`), which sessions and
+  `executor.platform_state` go through.
 - **Middleware** hooks, one per step, receive the executor and the next
   callable, like web-server middleware: they can alter arguments,
   post-process the output, or not call the next callable. The runner is always
@@ -145,11 +150,11 @@ only connect and disconnect the platform.
 - `new_session()` switches to a new folder; `Executor.attach(path)` (or an
   explicit `Session.attach`) continues an existing one, restoring the latest
   recorded platform state.
-
 - Platform states are obtained from, and restored through, the runner
-  (`Runner.platform_state`, `Runner.restore_platform`): a remote runner
-  without a local platform records the state it keeps (`Remote.state`) after
-  updates, and gets it back when attaching.
+  (`Runner.platform_state`, `Runner.set_platform_state`): a remote runner
+  without a local platform records the state it keeps (`Remote.state`, asked
+  to the remote machine at the start) after updates, and gets it back when
+  attaching.
 - Notes (`executor.note`, `Session.note`) go to Qibocal's `notes.json`, in the
   session folder or in an execution folder, written with the lock and atomic
   replacement used by qibocal-report's server, which may add notes
@@ -215,8 +220,8 @@ all. It was not chosen because:
 - A global side effect on import is surprising, and the wrapper approach makes
   the choice of frontend explicit at the point where the executor is created.
 
-It remains a cheap addition for Jupyter (an opt-in `register()` function), see
-[display-features.md](display-features.md).
+It remains possible as an opt-in for Jupyter, but was dropped from the plans,
+see [display-features.md](display-features.md).
 
 ### A proxy object around the executor (composition)
 
@@ -243,9 +248,12 @@ that first.
   frontend at module import time; the relevant extra must be installed.
 - Per-target reports assume the Qibocal convention `(figures, table)`. Other
   shapes are rendered on a best-effort basis (`Report.extra` is shown as text).
-- Jupyter rendering relies on `ipywidgets`; exported static notebooks (e.g.
-  `nbconvert` without widget state) will not show the accordions. A
-  widget-free HTML fallback is discussed in
+- Jupyter rendering relies on `ipywidgets`, and the platform explorer on
+  `anywidget`; exported static notebooks (e.g. `nbconvert` without widget
+  state) will not show them. A widget-free HTML fallback is discussed in
   [display-features.md](display-features.md).
+- Protocols not registered in `qibocal.protocols` are recorded in sessions,
+  but neither listed in their history nor shown by qibocal-report, since
+  Qibocal can only load registered protocols back.
 - The package depends on the unreleased `protodev` branch of Qibocal; see
   [packaging-and-ci.md](packaging-and-ci.md).
