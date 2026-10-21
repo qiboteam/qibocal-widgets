@@ -11,4 +11,5 @@ The public interface is made of the modules below. Everything else
     jupyter
     remote
     explorer
+    monitor
     core

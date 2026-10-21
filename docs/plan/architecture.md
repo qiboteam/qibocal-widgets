@@ -21,7 +21,7 @@ reported  # raw data + per-target reports
 All the implementation lives in the private `qibocal_widgets._core`
 subpackage; the public modules (`qibocal_widgets`, `qibocal_widgets.marimo`,
 `qibocal_widgets.jupyter`, `qibocal_widgets.remote`,
-`qibocal_widgets.explorer`) only re-export from it, which a test enforces.
+`qibocal_widgets.explorer`, `qibocal_widgets.monitor`) only re-export from it, which a test enforces.
 Frontends are kept as thin as possible, on top of frontend-agnostic
 extraction.
 
@@ -57,8 +57,8 @@ of extensions with different semantics:
   executor:` and the `Executor.open(...)` classmethod): the output folder
   belongs to the session (section 5). A runner executing some steps elsewhere
   overrides only those. Being a single slot, it needs no conflict resolution,
-  and runner-specific operations (`Remote.install()`, `Remote.describe()`)
-  have a natural home. Runners also own the platform state the steps run on
+  and runner-specific operations (`Remote.install()`, `Remote.describe()`,
+  `Remote.queue()`, `Remote.monitor()`) have a natural home. Runners also own the platform state the steps run on
   (`platform_state`, `set_platform_state`), which sessions and
   `executor.platform_state` go through.
 - **Middleware** hooks, one per step, receive the executor and the next

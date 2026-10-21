@@ -60,7 +60,8 @@ phase of an executor with the frontend.
 
 The `Remote` runner (`qibocal_widgets.remote`) dispatches the acquisition to
 the machine with the instruments, through SLURM and SSH, while fit and report
-run locally; named connections are shared with qibocal-report:
+run locally; named connections are shared with qibocal-report, and the queue
+can be followed from the notebook (`executor.runner.monitor()`):
 
 ```python
 executor = Executor(None, targets=[0, 1], runner=Remote("lab"), frontends=[Marimo()])
@@ -118,6 +119,7 @@ implemented in the private `qibocal_widgets._core` subpackage:
   `ipywidgets`), `show_data`, `show_reports`, `wrap`.
 - `qibocal_widgets.remote`: the `Remote` runner, and connections management.
 - `qibocal_widgets.explorer`: the platform state explorer widget.
+- `qibocal_widgets.monitor`: the SLURM queue monitor widget.
 
 Inside `_core`: `data` and `reports` (extraction, no frontend import),
 `layout` (shared display policy), `completed`, `frontend`, `runner`,

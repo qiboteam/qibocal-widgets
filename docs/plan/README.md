@@ -12,8 +12,8 @@ stay traceable).
 | [remote-executor.md](remote-executor.md) | Running protocols on the machine with the instruments, through SLURM and SSH ([#1](https://github.com/qiboteam/qibocal-widgets/issues/1)) | implemented, follow-ups |
 | [display-features.md](display-features.md) | Richer rendering of executions and sessions | proposals |
 | [interactive-execution.md](interactive-execution.md) | Driving the executor from widgets | proposals |
-| [slurm-monitor.md](slurm-monitor.md) | Following the queue from the notebook | mostly superseded, one proposal |
-| [packaging-and-ci.md](packaging-and-ci.md) | Release, CI, documentation | partly implemented, pending actions |
+| [slurm-monitor.md](slurm-monitor.md) | Following the queue from the notebook | implemented, the rest superseded |
+| [packaging-and-ci.md](packaging-and-ci.md) | Release, CI, documentation | mostly implemented, administrator actions pending |
 
 ## Origin
 

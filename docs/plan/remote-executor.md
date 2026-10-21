@@ -114,6 +114,9 @@ timeouts, unreachable hosts, missing environments, and unavailable protocols.
   served by qibocal-report (#2), platform updates included.
 - **Remote platform inspection**: the `describe` action returns the remote
   platform state, explored with `executor.platform_state` (#3).
+- **Queue**: `Remote.queue()` and `Remote.monitor()` show the SLURM queue of
+  the connection, the runner's jobs tagged by name (see
+  [slurm-monitor.md](slurm-monitor.md)).
 
 ### Remaining
 

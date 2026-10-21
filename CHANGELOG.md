@@ -27,4 +27,7 @@ First development version, targeting the executor interface of Qibocal's
   (`QIBOCAL_REPORTS_DIR`), and `reports_dir()`.
 - `PlatformState`: platform parameters and calibration by path, with an
   interactive explorer for Jupyter and Marimo.
+- `Remote.queue()` and `Remote.monitor()`: the SLURM queue of the connection,
+  with qibocal-report's query, and a refreshable view highlighting the user's
+  jobs and the runner's (named `qibocal-widgets-<action>`).
 - Documentation, with the examples executed on Qibocal's mock platform.

@@ -122,3 +122,27 @@ in a notebook cell cannot be executed remotely.
 
 Failures raise :class:`~qibocal_widgets.remote.RemoteError`, carrying the
 remote traceback or error output.
+
+Queue
+-----
+
+While acquisitions wait in the queue, the queue itself can be followed from
+the notebook, through the same connection:
+
+.. code-block:: python
+
+    remote = executor.runner
+    remote.queue()  # asked once: jobs, node groups, summary, remote user
+    remote.monitor()  # a refreshable view, for Jupyter and Marimo
+
+By default, the whole partition the acquisitions are submitted to is shown,
+so that the jobs ahead are visible. The jobs of the remote user are
+highlighted, and those submitted by the runner are tagged: its ``srun`` jobs are
+named ``qibocal-widgets-<action>``, unless the ``slurm`` options set a name.
+The monitor refreshes periodically while displayed (every 30 seconds by
+default, ``interval=0`` to refresh only on request), and can show only the
+user's jobs. Every refresh asks the controller, so keep the interval
+reasonable.
+
+The query (``squeue``, ``sinfo`` and ``whoami`` in a single round trip) and its
+fields are the ones of qibocal-report, whose launcher shows the same queue.
