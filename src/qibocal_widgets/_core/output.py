@@ -1,7 +1,7 @@
 """Default output location, from the session's reports folder.
 
-Notebook sessions started by qibocal-report may have a reports folder,
-exported as the ``QIBOCAL_REPORTS_DIR`` environment variable. Its report server
+Notebook sessions started by Qibocamp may have a reports folder,
+exported as the ``QIBOCAMP_REPORTS_DIR`` environment variable. Its report server
 scans that folder for report directories (recognized by their ``meta.json``),
 so every execution writes to its own fresh subfolder.
 """
@@ -15,15 +15,15 @@ from pathlib import Path
 
 __all__ = ["REPORTS_DIR", "default_path", "reports_dir"]
 
-REPORTS_DIR = "QIBOCAL_REPORTS_DIR"
+REPORTS_DIR = "QIBOCAMP_REPORTS_DIR"
 """Environment variable holding the session's reports folder."""
 
 
 def reports_dir() -> Path | None:
     """The session's reports folder, if any.
 
-    Read from the ``QIBOCAL_REPORTS_DIR`` environment variable, set by
-    qibocal-report for sessions with a reports folder (or by hand). Relative
+    Read from the ``QIBOCAMP_REPORTS_DIR`` environment variable, set by
+    Qibocamp for sessions with a reports folder (or by hand). Relative
     values are taken relative to the current working directory.
 
     Returns:

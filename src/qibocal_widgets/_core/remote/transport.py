@@ -1,6 +1,6 @@
 """Command lines reaching the remote machine, and job exchange.
 
-Commands follow the conventions of qibocal-report: plain ``ssh`` and ``srun``
+Commands follow the conventions of Qibocamp: plain ``ssh`` and ``srun``
 subprocesses, with the worker source passed inline. The job is written on the
 worker's standard input, and the outcome read from its standard output.
 """

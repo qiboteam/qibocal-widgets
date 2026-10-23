@@ -33,10 +33,10 @@ MARKER = "QIBOCAL_WIDGETS_RESULT "
 """Prefix of the line carrying the outcome on the standard output."""
 GUARD = "QIBOCAL_WIDGETS_WORKER"
 """Environment variable set when running inside the configured environment."""
-REQUIREMENTS = "qibocal-requirements.txt"
+REQUIREMENTS = "qibocamp-requirements.txt"
 """Marker of the requirements installed in an environment.
 
-Same name and content as the environments managed by qibocal-report.
+Same name and content as the environments managed by Qibocamp.
 """
 
 
@@ -48,7 +48,7 @@ def environment_path(venv: str) -> Path:
     if venv.startswith(("/", "./", "../", "~")):
         return Path(venv).expanduser()
     cache = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(cache) / "qibocal" / "envs" / venv
+    return Path(cache) / "qibocamp" / "envs" / venv
 
 
 def environment_python(env: Path) -> Path:
@@ -76,14 +76,14 @@ def normalize(requirements: "str | None") -> str:
 
 
 def find_uv() -> "str | None":
-    """Locate uv, as qibocal-report does, unless disabled."""
-    if os.environ.get("QIBOCAL_NO_UV"):
+    """Locate uv, as Qibocamp does, unless disabled."""
+    if os.environ.get("QIBOCAMP_NO_UV"):
         return None
     found = shutil.which("uv")
     if found is not None:
         return found
     cache = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    tool = Path(cache) / "qibocal" / "tools" / "uv"
+    tool = Path(cache) / "qibocamp" / "tools" / "uv"
     return str(tool) if tool.is_file() else None
 
 

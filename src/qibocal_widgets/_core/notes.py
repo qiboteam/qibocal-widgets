@@ -1,6 +1,6 @@
 """Notes on sessions and executions, in Qibocal's ``notes.json``.
 
-Writes follow the protocol of qibocal-report, whose report server may append
+Writes follow the protocol of Qibocamp, whose report server may append
 notes to the same files while serving a session live: a ``.notes.lock`` file,
 locked exclusively, serializes writers, and the notes file is replaced
 atomically.
@@ -20,7 +20,7 @@ from qibocal.auto.notes import NOTES, Note, load_notes
 __all__ = ["append", "load"]
 
 LOCK = ".notes.lock"
-"""Lock file shared with qibocal-report."""
+"""Lock file shared with Qibocamp."""
 
 _NOTES = TypeAdapter(list[Note])
 

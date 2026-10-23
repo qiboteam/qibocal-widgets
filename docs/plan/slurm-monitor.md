@@ -19,16 +19,16 @@ queue view is implemented on top of the remote runner.
   - jobs and nodes by state, pending reasons, time used and limit;
   - refreshed on request, or periodically while displayed (30 s by default,
     configurable from the view); a "mine only" filter.
-- **Same query as qibocal-report**: the same `squeue`, `sinfo`, and `whoami`
+- **Same query as Qibocamp**: the same `squeue`, `sinfo`, and `whoami`
   round trip and parsed fields (`_core.remote.queue`), with the format strings
-  pinned by a test. qibocal-report is a server application, not on PyPI, so
+  pinned by a test. Qibocamp is a server application, not on PyPI, so
   the query is mirrored rather than imported.
 
 ## Remaining
 
 - **Shared package**: move the queue query (and the connection model, see
   [remote-executor.md](remote-executor.md)) to a package common to
-  qibocal-widgets and qibocal-report, removing the mirror.
+  qibocal-widgets and Qibocamp, removing the mirror.
 - **Pending executions linked to their jobs**: with asynchronous remote jobs
   (follow-up of [remote-executor.md](remote-executor.md)), pending executions
   could show their job's state, from the same query.
@@ -45,9 +45,9 @@ queue view is implemented on top of the remote runner.
   plain `ssh` with the user's configuration.
 - **Platform status widget**: the platform state explorer (#3), with
   comparison against the start of the session.
-- **Calibration dashboard**: the report server of qibocal-report serves the
+- **Calibration dashboard**: the report server of Qibocamp serves the
   session folders, and shows the executions and their history.
-- **A separate queue backend**: the view reuses qibocal-report's query, as
+- **A separate queue backend**: the view reuses Qibocamp's query, as
   above, rather than a new implementation.
 
 ## Dropped

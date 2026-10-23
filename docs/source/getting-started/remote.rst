@@ -5,7 +5,7 @@ The :class:`~qibocal_widgets.remote.Remote` runner executes the steps needing th
 instruments on the machine which has access to them, while the notebook runs
 elsewhere. It follows the multi-tier architecture of the `interactive usage
 <https://qibo.science/qibocal/stable/tutorials/interactive.html>`_ of Qibocal,
-and the conventions of `qibocal-report <https://github.com/qiboteam/qibocal-report>`_.
+and the conventions of `Qibocamp <https://github.com/qiboteam/qibocamp>`_.
 
 .. code-block:: python
 
@@ -78,8 +78,8 @@ Connection options can be given directly, or stored by name:
     Remote(queue="qpu", platform="chip")  # without any file
 
 Named connections live in ``remotes.json``, in the configuration directory
-shared with qibocal-report (``$QIBOCAL_REPORT_CONFIG_DIR``, else
-``$XDG_CONFIG_HOME/qibocal``, else ``~/.config/qibocal``):
+shared with Qibocamp (``$QIBOCAMP_CONFIG_DIR``, else
+``$XDG_CONFIG_HOME/qibocamp``, else ``~/.config/qibocamp``):
 
 .. code-block:: json
 
@@ -90,7 +90,7 @@ shared with qibocal-report (``$QIBOCAL_REPORT_CONFIG_DIR``, else
       }
     }
 
-The fields mirror the notebook connections of qibocal-report, so that its
+The fields mirror the notebook connections of Qibocamp, so that its
 launcher can manage them as well. SSH host aliases and jump hosts from
 ``~/.ssh/config`` are honored; connections never prompt for passwords
 (``BatchMode``), so set up key-based authentication.
@@ -99,9 +99,9 @@ Environments and protocols
 --------------------------
 
 Remote steps run in a Python environment on the remote machine, under
-``~/.cache/qibocal/envs``, the same location used by qibocal-report. A named
+``~/.cache/qibocamp/envs``, the same location used by Qibocamp. A named
 connection has one of its own by default, named after it under ``_remote/``
-(``lab`` uses ``~/.cache/qibocal/envs/_remote/lab``), shared with no other
+(``lab`` uses ``~/.cache/qibocamp/envs/_remote/lab``), shared with no other
 connection nor notebook session unless ``venv`` names it on purpose; a
 connection given inline uses ``qibocal``.
 Installing it is a separate operation, never performed by the steps:
@@ -149,4 +149,4 @@ user's jobs. Every refresh asks the controller, so keep the interval
 reasonable.
 
 The query (``squeue``, ``sinfo`` and ``whoami`` in a single round trip) and its
-fields are the ones of qibocal-report, whose launcher shows the same queue.
+fields are the ones of Qibocamp, whose launcher shows the same queue.

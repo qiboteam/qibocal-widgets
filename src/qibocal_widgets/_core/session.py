@@ -2,7 +2,7 @@
 
 A session folder keeps exactly the layout of Qibocal's runcard outputs, so
 that Qibocal (``Output.load``, ``Completed.load``) and the report server of
-qibocal-report read it unchanged:
+Qibocamp read it unchanged:
 
 - ``data/<id>-<iteration>/``: one folder per acquisition, with ``action.yml``
   (operation, targets, executed parameters), the data files, and the results

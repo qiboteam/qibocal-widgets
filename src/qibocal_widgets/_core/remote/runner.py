@@ -107,7 +107,7 @@ class Remote(Runner):
         By default, the whole partition the acquisitions are submitted to, so
         that the jobs ahead are visible; the jobs of the remote user are
         flagged as ``mine``, those of this runner as ``ours``. The query and
-        its fields are the ones of qibocal-report.
+        its fields are the ones of Qibocamp.
 
         Args:
             partition: defaults to the ``queue`` of the connection.

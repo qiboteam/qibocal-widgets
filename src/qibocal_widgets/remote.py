@@ -13,7 +13,7 @@ access to the instruments, according to a :class:`Connection`::
     executor(bound)  # acquired remotely, fitted and reported locally
 
 Connections are stored in ``remotes.json``, in the configuration directory
-shared with qibocal-report, and managed with :func:`save_connection`,
+shared with Qibocamp, and managed with :func:`save_connection`,
 :func:`remove_connection`, and :func:`connections`.
 """
 

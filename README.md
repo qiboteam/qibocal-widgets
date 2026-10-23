@@ -60,7 +60,7 @@ phase of an executor with the frontend.
 
 The `Remote` runner (`qibocal_widgets.remote`) dispatches the acquisition to
 the machine with the instruments, through SLURM and SSH, while fit and report
-run locally; named connections are shared with qibocal-report, and the queue
+run locally; named connections are shared with Qibocamp, and the queue
 can be followed from the notebook (`executor.runner.monitor()`):
 
 ```python
@@ -71,12 +71,12 @@ Every execution is recorded in the executor's session folder, appended for as
 long as the instance lives, in the layout of Qibocal's outputs: start a new
 folder with `executor.new_session()`, or continue an existing one with
 `Executor.attach(path)`. In notebook sessions with a reports folder
-(`QIBOCAL_REPORTS_DIR`, set by qibocal-report), the folder defaults to a fresh
+(`QIBOCAMP_REPORTS_DIR`, set by Qibocamp), the folder defaults to a fresh
 subfolder of it, so calibrations show up in its report dashboard;
 `reports_dir()` returns the folder.
 
 The calibration state of the platform can be explored and updated by path,
-with the same paths as qibolab's `Platform.update` and the qibocal-report
+with the same paths as qibolab's `Platform.update` and the Qibocamp
 dashboard, from code or with an interactive explorer (Jupyter and Marimo):
 
 ```python

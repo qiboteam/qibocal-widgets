@@ -93,7 +93,7 @@ def cluster(tmp_path, monkeypatch):
     executable(bin / "uv", FAKE_UV)
     (bin / "python3").symlink_to(sys.executable)
     cache = tmp_path / "cache"
-    env = cache / "qibocal" / "envs" / "qibocal" / "bin"
+    env = cache / "qibocamp" / "envs" / "qibocal" / "bin"
     env.mkdir(parents=True)
     (env / "python").write_text(f'#!/bin/sh\nexec {sys.executable} "$@"\n')
     (env / "python").chmod(0o755)
@@ -132,7 +132,7 @@ def test_config_roundtrip():
     assert load_connection("lab") == own
     assert connections() == {"lab": own}
     content = json.loads(config_path().read_text())
-    # only non-default fields are stored, in qibocal-report's versioned layout
+    # only non-default fields are stored, in Qibocamp's versioned layout
     assert content == {
         "version": 1,
         "connections": {"lab": {"ssh": "me@login", "queue": "qpu", "platform": "chip"}},
@@ -434,7 +434,7 @@ def test_install(cluster, tmp_path):
     outcome = remote.install()
     assert outcome["installed"]
     env = Path(outcome["environment"])
-    assert env == tmp_path / "cache" / "qibocal" / "envs" / "fresh"
+    assert env == tmp_path / "cache" / "qibocamp" / "envs" / "fresh"
     assert (env / worker.REQUIREMENTS).read_text() == requirements + "\n"
 
     # installed on the access node, outside of the queue
@@ -470,7 +470,7 @@ def test_install_pip_fallback(tmp_path, monkeypatch):
         env.mkdir(exist_ok=True)
 
     monkeypatch.setattr(worker, "run_installer", installer)
-    monkeypatch.setenv("QIBOCAL_NO_UV", "1")
+    monkeypatch.setenv("QIBOCAMP_NO_UV", "1")
     outcome = worker.install(
         {"venv": str(env), "python": "/usr/bin/python3.12", "requirements": "numpy"}
     )

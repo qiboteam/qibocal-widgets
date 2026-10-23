@@ -224,10 +224,10 @@ def test_new_session(tmp_path, ramsey, monkeypatch):
     assert meta(second)["stats"].keys() == {"ramsey_signal-0", "ramsey_signal-1"}
 
     # by default, under the reports folder
-    monkeypatch.setenv("QIBOCAL_REPORTS_DIR", str(tmp_path / "reports"))
+    monkeypatch.setenv("QIBOCAMP_REPORTS_DIR", str(tmp_path / "reports"))
     assert executor.new_session().path.parent == tmp_path / "reports"
-    monkeypatch.delenv("QIBOCAL_REPORTS_DIR")
-    with pytest.raises(TypeError, match="QIBOCAL_REPORTS_DIR"):
+    monkeypatch.delenv("QIBOCAMP_REPORTS_DIR")
+    with pytest.raises(TypeError, match="QIBOCAMP_REPORTS_DIR"):
         executor.new_session()
 
 

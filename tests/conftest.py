@@ -16,10 +16,10 @@ PLATFORMS = Path(__file__).parent / "platforms"
 def isolated_config(tmp_path_factory, monkeypatch):
     """Never read or write the user's configuration."""
     monkeypatch.setenv(
-        "QIBOCAL_REPORT_CONFIG_DIR", str(tmp_path_factory.mktemp("config"))
+        "QIBOCAMP_CONFIG_DIR", str(tmp_path_factory.mktemp("config"))
     )
     monkeypatch.delenv("QIBOCAL_WIDGETS_CONNECTION", raising=False)
-    monkeypatch.delenv("QIBOCAL_REPORTS_DIR", raising=False)
+    monkeypatch.delenv("QIBOCAMP_REPORTS_DIR", raising=False)
 
 
 @pytest.fixture

@@ -22,5 +22,5 @@ helpers of
 [qibolab-simulator](https://github.com/qiboteam/qibolab-simulator/blob/main/notebooks/helpers/__init__.py)
 without explicit invocation, for both Marimo and Jupyter, sharing as much code
 as possible. The scope then grew to remote execution (#1), the reports folder
-of qibocal-report sessions (#2), platform states (#3), and session folders
+of Qibocamp sessions (#2), platform states (#3), and session folders
 (#4).

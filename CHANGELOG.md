@@ -13,7 +13,7 @@ First development version, targeting the executor interface of Qibocal's
 ### Added
 
 - A named remote connection has an environment of its own by default,
-  `_remote/<name>`, as qibocal-report's launcher resolves it.
+  `_remote/<name>`, as Qibocamp's desktop application resolves it.
 - `Executor`, a drop-in replacement of `qibocal.Executor`, composed of a
   runner, middleware, and frontends.
 - `Marimo` and `Jupyter` frontends, displaying executions with no helper call
@@ -21,15 +21,15 @@ First development version, targeting the executor interface of Qibocal's
   `show_data`, `show_reports`, and `wrap` helpers.
 - Remote execution (`qibocal_widgets.remote.Remote`): acquisitions dispatched
   through SLURM and SSH, with JSON and NPZ jobs, named connections shared with
-  qibocal-report, and separately installed environments.
+  Qibocamp, and separately installed environments.
 - Session folders: every execution recorded and appended in Qibocal's output
-  layout, readable by Qibocal and qibocal-report; `new_session()`,
+  layout, readable by Qibocal and Qibocamp; `new_session()`,
   `Executor.attach()`, platform states, and notes.
 - Default output location from the session's reports folder
-  (`QIBOCAL_REPORTS_DIR`), and `reports_dir()`.
+  (`QIBOCAMP_REPORTS_DIR`), and `reports_dir()`.
 - `PlatformState`: platform parameters and calibration by path, with an
   interactive explorer for Jupyter and Marimo.
 - `Remote.queue()` and `Remote.monitor()`: the SLURM queue of the connection,
-  with qibocal-report's query, and a refreshable view highlighting the user's
+  with Qibocamp's query, and a refreshable view highlighting the user's
   jobs and the runner's (named `qibocal-widgets-<action>`).
 - Documentation, with the examples executed on Qibocal's mock platform.

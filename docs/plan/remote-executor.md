@@ -14,7 +14,7 @@ User documentation: `docs/source/getting-started/remote.rst`.
 - **Cut at the executor level**: on the remote side, a plain
   `qibocal.Executor` runs the step, the most tested path of Qibocal.
 - **Multi-tier, as in the interactive architecture of Qibocal and in
-  qibocal-report**: nothing on the compute node, one blocking `srun` job per
+  Qibocamp**: nothing on the compute node, one blocking `srun` job per
   step from the access node, optionally through SSH from a laptop. The tier
   follows from the connection options, not from detection.
 - **No Dask**: too specific; plain `srun` covers the queue. `submitit` remains
@@ -22,12 +22,12 @@ User documentation: `docs/source/getting-started/remote.rst`.
 - **JSON and NPZ only, no pickle**: protocols by `module:attribute`
   reference, parameters as JSON documents, platform state as Qibocal's JSON
   dumps, data and results as the files of their `save` methods.
-- **Further protocols through environment management**, as qibocal-report
+- **Further protocols through environment management**, as Qibocamp
   does for notebooks: requirements in `requirements.txt` format, installed
   separately (`Remote.install()`) from execution.
 - **Connections configurable on the runner or by name**, in a file shared with
-  qibocal-report, to be editable from its launcher
-  ([qibocal-report#53](https://github.com/qiboteam/qibocal-report/issues/53)).
+  Qibocamp, to be editable from its launcher
+  ([qibocamp#53](https://github.com/qiboteam/qibocamp/issues/53)).
 
 ## How it works
 
@@ -61,7 +61,7 @@ state back to the runner.
 
 ### Wire protocol
 
-Aligned with qibocal-report:
+Aligned with Qibocamp:
 
 - commands are plain `ssh` and `srun` subprocesses; SSH runs with
   `-T -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3`;
@@ -76,24 +76,24 @@ Aligned with qibocal-report:
 
 ### Configuration
 
-`remotes.json`, next to qibocal-report's files
-(`$QIBOCAL_REPORT_CONFIG_DIR`, `$XDG_CONFIG_HOME/qibocal`,
-`~/.config/qibocal`), versioned and written atomically like them:
+`remotes.json`, next to Qibocamp's files
+(`$QIBOCAMP_CONFIG_DIR`, `$XDG_CONFIG_HOME/qibocamp`,
+`~/.config/qibocamp`), versioned and written atomically like them:
 
 ```json
 {"version": 1, "connections": {"lab": {"ssh": "me@login", "queue": "qpu"}}}
 ```
 
 Fields: `ssh`, `queue`, `slurm`, `workdir`, `venv`, `requirements`,
-`rebuild_on_compute` (same meaning as qibocal-report's notebook connections),
+`rebuild_on_compute` (same meaning as Qibocamp's notebook connections),
 plus `python` (interpreter or uv version for the environment), `platform`, and
 `timeout`. `QIBOCAL_WIDGETS_CONNECTION` selects a named connection for
 `Remote()`, so notebooks need no change across tiers.
 
 ### Environments
 
-Same location (`~/.cache/qibocal/envs/<venv>`), installer (uv, else venv and
-pip; `QIBOCAL_NO_UV`), and requirements marker file as qibocal-report, so an
+Same location (`~/.cache/qibocamp/envs/<venv>`), installer (uv, else venv and
+pip; `QIBOCAMP_NO_UV`), and requirements marker file as Qibocamp, so an
 environment prepared by one tool is recognized by the other.
 
 ## Testing
@@ -111,7 +111,7 @@ timeouts, unreachable hosts, missing environments, and unavailable protocols.
 
 - **Report server and persisted outputs**: remote executions are recorded in
   the executor's session folder (#4), by default under the reports folder
-  served by qibocal-report (#2), platform updates included.
+  served by Qibocamp (#2), platform updates included.
 - **Remote platform inspection**: the `describe` action returns the remote
   platform state, explored with `executor.platform_state` (#3).
 - **Queue**: `Remote.queue()` and `Remote.monitor()` show the SLURM queue of
@@ -121,7 +121,7 @@ timeouts, unreachable hosts, missing environments, and unavailable protocols.
 ### Remaining
 
 1. **Launcher integration**
-   ([qibocal-report#53](https://github.com/qiboteam/qibocal-report/issues/53)):
+   ([qibocamp#53](https://github.com/qiboteam/qibocamp/issues/53)):
    a *Remote execution* section editing `remotes.json`. The connection schema
    is meant to be shared, possibly moving the connection model (and the queue
    query, see [slurm-monitor.md](slurm-monitor.md)) to a package common to

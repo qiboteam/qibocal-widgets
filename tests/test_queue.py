@@ -56,15 +56,15 @@ def slurm(tmp_path, monkeypatch):
     return calls
 
 
-def test_same_query_as_qibocal_report():
-    """Pinned to qibocal_report.remote.slurm, so that both tools agree."""
+def test_same_query_as_qibocamp():
+    """Pinned to qibocamp.remote.slurm, so that both tools agree."""
     assert queue.SQUEUE_FORMAT == "%i|%P|%j|%u|%T|%M|%l|%D|%R|%Q|%V|%S"
     assert queue.SINFO_FORMAT == "%P|%a|%D|%T"
-    assert queue.SEPARATOR == "---QIBOCAL-QUEUE---"
+    assert queue.SEPARATOR == "---QIBOCAMP-QUEUE---"
     assert queue.shell_script("qpu", "alice", ["PENDING"]) == (
         "squeue -h -o '%i|%P|%j|%u|%T|%M|%l|%D|%R|%Q|%V|%S' --sort=-p,i -p qpu "
-        "-u alice -t PENDING; printf '\\n---QIBOCAL-QUEUE---\\n'; "
-        "sinfo -h -o '%P|%a|%D|%T' -p qpu; printf '\\n---QIBOCAL-QUEUE---\\n'; whoami"
+        "-u alice -t PENDING; printf '\\n---QIBOCAMP-QUEUE---\\n'; "
+        "sinfo -h -o '%P|%a|%D|%T' -p qpu; printf '\\n---QIBOCAMP-QUEUE---\\n'; whoami"
     )
 
 

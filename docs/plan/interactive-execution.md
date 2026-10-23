@@ -9,7 +9,7 @@ are middleware or runners.
 ## Done
 
 - **Notes, from code**: `executor.note(text)` and `executor.note(text,
-  completed)` write to Qibocal's `notes.json`, shared with the qibocal-report
+  completed)` write to Qibocal's `notes.json`, shared with the Qibocamp
   dashboard (see [architecture.md](architecture.md)).
 - **Platform parameters, interactively**: browsing and editing the platform
   state is the explorer of `executor.platform_state.explore(editable=True)`
