@@ -26,20 +26,20 @@ def session(tmp_path, monkeypatch):
     work = tmp_path / "work"
     work.mkdir()
     monkeypatch.chdir(work)
-    monkeypatch.setenv("QIBOCAL_REPORTS_DIR", str(root))
+    monkeypatch.setenv("QIBOCAMP_REPORTS_DIR", str(root))
     return root
 
 
 def test_reports_dir_unset(monkeypatch):
     assert reports_dir() is None
-    monkeypatch.setenv("QIBOCAL_REPORTS_DIR", "")
+    monkeypatch.setenv("QIBOCAMP_REPORTS_DIR", "")
     assert reports_dir() is None
     assert output.default_path() is None
 
 
 def test_reports_dir(session, monkeypatch):
     assert reports_dir() == session
-    monkeypatch.setenv("QIBOCAL_REPORTS_DIR", "relative")
+    monkeypatch.setenv("QIBOCAMP_REPORTS_DIR", "relative")
     assert reports_dir().is_absolute()
     assert reports_dir().name == "relative"
 
@@ -68,7 +68,7 @@ def test_explicit_path_wins(session, mock):
 
 
 def test_create_without_path_nor_reports(mock):
-    with pytest.raises(TypeError, match="QIBOCAL_REPORTS_DIR"):
+    with pytest.raises(TypeError, match="QIBOCAMP_REPORTS_DIR"):
         Executor.create(platform="mock")
 
 

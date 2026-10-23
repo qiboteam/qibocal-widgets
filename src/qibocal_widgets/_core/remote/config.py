@@ -1,13 +1,13 @@
 """Remote connections and their configuration file.
 
-The layout follows qibocal-report, so that its launcher can manage these
+The layout follows Qibocamp, so that its launcher can manage these
 connections too: the file ``remotes.json`` lives in the same configuration
-directory (``$QIBOCAL_REPORT_CONFIG_DIR``, else ``$XDG_CONFIG_HOME/qibocal``,
-else ``~/.config/qibocal``), with the same versioned structure::
+directory (``$QIBOCAMP_CONFIG_DIR``, else ``$XDG_CONFIG_HOME/qibocamp``,
+else ``~/.config/qibocamp``), with the same versioned structure::
 
     {"version": 1, "connections": {"<name>": {<Connection fields>}}}
 
-and the connection fields mirror the notebook connections of qibocal-report.
+and the connection fields mirror the notebook connections of Qibocamp.
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ class Connection(BaseModel):
     workdir: str | None = Field(default=None, min_length=1)
     """Remote working directory."""
     venv: str = Field(default="qibocal", min_length=1)
-    """Environment name, under ``~/.cache/qibocal/envs``, or path."""
+    """Environment name, under ``~/.cache/qibocamp/envs``, or path."""
     python: str | None = Field(default=None, min_length=1)
     """Interpreter, or version with uv, used to create the environment."""
     requirements: str | None = Field(default=None, min_length=1)
@@ -109,13 +109,13 @@ class Connection(BaseModel):
 
 
 def config_dir() -> Path:
-    """Configuration directory shared with qibocal-report."""
-    explicit = os.environ.get("QIBOCAL_REPORT_CONFIG_DIR")
+    """Configuration directory shared with Qibocamp."""
+    explicit = os.environ.get("QIBOCAMP_CONFIG_DIR")
     if explicit:
         return Path(explicit).expanduser()
     xdg = os.environ.get("XDG_CONFIG_HOME")
     base = Path(xdg).expanduser() if xdg else Path.home() / ".config"
-    return base / "qibocal"
+    return base / "qibocamp"
 
 
 def config_path() -> Path:
@@ -140,7 +140,7 @@ def _write(raw: dict) -> None:
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     content = json.dumps({"version": CONFIG_VERSION, "connections": raw}, indent=2)
-    # atomic replacement, as qibocal-report does
+    # atomic replacement, as Qibocamp does
     with tempfile.NamedTemporaryFile(
         "w", dir=path.parent, prefix=f".{FILENAME}.", delete=False
     ) as file:
@@ -153,7 +153,7 @@ def environment_name(name: str) -> str:
 
     Its name made safe for a folder, under ``_remote/``: distinct connections,
     and notebook sessions of the same name, do not share one unless it is
-    named on purpose. The same rule as qibocal-report's launcher.
+    named on purpose. The same rule as Qibocamp's desktop application.
     """
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", name).lstrip("-._").rstrip("-.")
     return f"_remote/{safe or 'qibocal'}"

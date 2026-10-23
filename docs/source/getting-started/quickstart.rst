@@ -117,7 +117,7 @@ as the instance lives.
         ramsey = executor(protocols.ramsey(...))  # var/session/data/ramsey-0
 
 The folder keeps the layout of Qibocal's runcard outputs, so that Qibocal and
-the report server of qibocal-report read it unchanged:
+the report server of Qibocamp read it unchanged:
 
 - every acquisition gets its own ``data/<protocol>-<iteration>`` folder, with
   its parameters, data, and, once fitted, results (re-fitting overwrites them);
@@ -172,8 +172,8 @@ Output location
 ~~~~~~~~~~~~~~~
 
 Notebook sessions started by the Qibocal application, or by ``qibocal notebook``
-from `qibocal-report <https://github.com/qiboteam/qibocal-report>`_, may have
-a *reports folder*, exported as the ``QIBOCAL_REPORTS_DIR`` environment
+from `Qibocamp <https://github.com/qiboteam/qibocamp>`_, may have
+a *reports folder*, exported as the ``QIBOCAMP_REPORTS_DIR`` environment
 variable. Its report server serves that folder, so calibrations show up in the
 dashboard while the session goes on.
 

@@ -10,7 +10,7 @@ document name::
     calibration.single_qubits.0.qubit.frequency_01
 
 Within each document, paths are those of qibolab's ``Platform.update`` and of
-the platform view of the qibocal-report dashboard: numeric segments index
+the platform view of the Qibocamp dashboard: numeric segments index
 lists, keys are the ones in the JSON files (e.g. ``0/drive``, ``0-1``).
 
 Leaves follow the dashboard too: scalars, ``null``, and lists of numbers
@@ -279,7 +279,7 @@ class PlatformState:
         Accepted forms, so that paths can be pasted from anywhere:
 
         - a full path: ``parameters.configs.0/drive.frequency``;
-        - a path within a document, as copied from the qibocal-report dashboard
+        - a path within a document, as copied from the Qibocamp dashboard
           (which shows one file at a time) or written for qibolab's
           ``Platform.update``: ``configs.0/drive.frequency``;
         - any text quoting a path, as an API call or its output:

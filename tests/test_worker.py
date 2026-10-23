@@ -95,7 +95,7 @@ def test_files_roundtrip(tmp_path):
 
 def test_environment_path(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    assert worker.environment_path("qibocal") == tmp_path / "qibocal/envs/qibocal"
+    assert worker.environment_path("qibocal") == tmp_path / "qibocamp/envs/qibocal"
     assert worker.environment_path("/opt/env") == Path("/opt/env")
     assert worker.environment_path("~/env") == Path.home() / "env"
 
@@ -145,7 +145,7 @@ def test_main_install(monkeypatch, capsys, tmp_path):
         env.mkdir(exist_ok=True)
 
     monkeypatch.setattr(worker, "run_installer", installer)
-    monkeypatch.setenv("QIBOCAL_NO_UV", "1")
+    monkeypatch.setenv("QIBOCAMP_NO_UV", "1")
     code, outcome = run_main(
         monkeypatch, capsys, {"action": "install", "venv": str(env)}, guard=False
     )

@@ -112,7 +112,7 @@ class Executor(QibocalExecutor):
 
         Args:
             path: the output folder. If omitted, a fresh subfolder of the
-                session's reports folder (``QIBOCAL_REPORTS_DIR``) is used.
+                session's reports folder (``QIBOCAMP_REPORTS_DIR``) is used.
             targets: as in :meth:`qibocal.Executor.create`.
             platform: as in :meth:`qibocal.Executor.create`.
             **kwargs: as in the constructor.
@@ -194,7 +194,7 @@ class Executor(QibocalExecutor):
 
         Args:
             path: the new folder. If omitted, a fresh subfolder of the
-                session's reports folder (``QIBOCAL_REPORTS_DIR``) is used.
+                session's reports folder (``QIBOCAMP_REPORTS_DIR``) is used.
 
         Raises:
             TypeError: without ``path``, when no reports folder is set.

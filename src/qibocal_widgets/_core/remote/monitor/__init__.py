@@ -38,7 +38,7 @@ class QueueMonitor(anywidget.AnyWidget):
     user = traitlets.Unicode("").tag(sync=True)
     """The remote user the queue was asked as."""
     jobs = traitlets.List().tag(sync=True)
-    """Displayed jobs, with the fields of qibocal-report, ``mine`` and ``ours``."""
+    """Displayed jobs, with the fields of Qibocamp, ``mine`` and ``ours``."""
     total = traitlets.Int(0).tag(sync=True)
     """Number of jobs in the answer, before filtering."""
     summary = traitlets.Dict().tag(sync=True)

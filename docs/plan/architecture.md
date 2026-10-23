@@ -114,7 +114,7 @@ inside the output widgets.
 ### 4. Output location (`_core.output`)
 
 Following [#2](https://github.com/qiboteam/qibocal-widgets/issues/2), the
-session's reports folder (`QIBOCAL_REPORTS_DIR`, exported by qibocal-report's
+session's reports folder (`QIBOCAMP_REPORTS_DIR`, exported by Qibocamp's
 notebook sessions) is the default parent of the output path of
 `Executor.create` and `Executor.open`: each executor writes to a fresh
 `<YYYY-MM-DD>_<HH-MM-SS>_<user>` subfolder (UTC, numeric suffix on
@@ -136,7 +136,7 @@ only connect and disconnect the platform.
 - The folder keeps the layout of runcard outputs (`data/<id>-<iteration>/`
   with `action.yml`, data and results files; `history.json`; `meta.json`;
   `platform/` and `new_platform/`), so `Output.load`, `Completed.load`, and
-  qibocal-report read it unchanged. The id is the registered protocol name.
+  Qibocamp read it unchanged. The id is the registered protocol name.
 - Every change is written immediately: notebooks rarely close their
   executor.
 - Acquisitions create task folders; fits write results in the folder of the
@@ -157,7 +157,7 @@ only connect and disconnect the platform.
   attaching.
 - Notes (`executor.note`, `Session.note`) go to Qibocal's `notes.json`, in the
   session folder or in an execution folder, written with the lock and atomic
-  replacement used by qibocal-report's server, which may add notes
+  replacement used by Qibocamp's server, which may add notes
   concurrently.
 - Protocols are identified by equality, not identity: loaded executions hold
   copies of their protocol.
@@ -253,7 +253,7 @@ that first.
   state) will not show them. A widget-free HTML fallback is discussed in
   [display-features.md](display-features.md).
 - Protocols not registered in `qibocal.protocols` are recorded in sessions,
-  but neither listed in their history nor shown by qibocal-report, since
+  but neither listed in their history nor shown by Qibocamp, since
   Qibocal can only load registered protocols back.
 - The package depends on the unreleased `protodev` branch of Qibocal; see
   [packaging-and-ci.md](packaging-and-ci.md).

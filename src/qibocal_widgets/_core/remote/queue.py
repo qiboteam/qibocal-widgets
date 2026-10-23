@@ -1,9 +1,9 @@
 """The SLURM queue, as seen through a connection.
 
-The query mirrors qibocal-report's (``qibocal_report.remote.slurm``): the same
+The query mirrors Qibocamp's (``qibocamp.remote.slurm``): the same
 ``squeue``, ``sinfo`` and ``whoami`` commands, in a single remote shell
 command, and the same parsed fields, so that both tools show the queue alike.
-qibocal-report is not a dependency (it is a server application), hence the
+Qibocamp is not a dependency (it is a server application), hence the
 mirror: if the query moves to a package shared by both, this module becomes a
 re-export.
 
@@ -31,8 +31,8 @@ __all__ = [
     "shell_script",
 ]
 
-SEPARATOR = "---QIBOCAL-QUEUE---"
-"""Separates the answers of the three commands, as in qibocal-report."""
+SEPARATOR = "---QIBOCAMP-QUEUE---"
+"""Separates the answers of the three commands, as in Qibocamp."""
 SQUEUE_FORMAT = "%i|%P|%j|%u|%T|%M|%l|%D|%R|%Q|%V|%S"
 """Job fields: id, partition, name, user, state, time used, time limit, node
 count, nodes or reason, priority, submitted, start."""
@@ -79,7 +79,7 @@ def shell_script(
 
 
 def parse_squeue(text: str) -> list[dict[str, Any]]:
-    """Jobs, with the fields of qibocal-report."""
+    """Jobs, with the fields of Qibocamp."""
     jobs = []
     for line in text.splitlines():
         if not line.strip():
@@ -201,7 +201,7 @@ def query(
         timeout: seconds to wait for the answer.
 
     Returns:
-        The jobs and node groups (with the fields of qibocal-report), their
+        The jobs and node groups (with the fields of Qibocamp), their
         summary, the remote user (``whoami``), when the queue was asked, and
         the error, if the queue could not be asked. Jobs carry two more flags:
         ``mine`` (submitted by the remote user) and ``ours`` (submitted by

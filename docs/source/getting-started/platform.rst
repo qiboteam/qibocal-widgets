@@ -30,7 +30,7 @@ index lists):
     calibration.single_qubits.0.qubit.frequency_01
 
 Within each document, they are the paths of qibolab's ``Platform.update`` and
-of the platform view of the qibocal-report dashboard. Every method taking a
+of the platform view of the Qibocamp dashboard. Every method taking a
 path also accepts:
 
 - a path within a document, as copied from the dashboard, which shows one

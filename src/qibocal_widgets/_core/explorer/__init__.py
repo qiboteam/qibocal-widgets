@@ -33,7 +33,7 @@ HERE = Path(__file__).parent
 
 
 def format_number(value: float) -> str:
-    """Human-friendly number, as in the qibocal-report dashboard."""
+    """Human-friendly number, as in the Qibocamp dashboard."""
     if isinstance(value, bool):
         return str(value).lower()
     if isinstance(value, int):
