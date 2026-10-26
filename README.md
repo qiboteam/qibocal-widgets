@@ -131,9 +131,10 @@ whose browser side is a plain ES module next to it).
 
 Other folders:
 
-- `examples/`: a Marimo and a Jupyter notebook touring all the features, on
-  the simulated `qutrits` platform in `examples/platforms` (install the
-  `examples` dependency group).
+- `examples/`: for Marimo (`marimo/`) and Jupyter (`jupyter/`), a
+  `calibration` notebook touring the features on the simulated `qutrits`
+  platform in `examples/platforms` (install the `examples` dependency group),
+  and a `remote` notebook, running acquisitions on a cluster.
 - `docs/source/`: Sphinx documentation, published at
   <https://qibo.science/qibocal-widgets/latest/>.
 - `docs/plan/`: design notes and the roadmap of possible extensions.

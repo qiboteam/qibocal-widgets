@@ -92,12 +92,13 @@ docs-html = "make -C docs html"
 docs-clean = "make -C docs clean"
 test-docs = "make -C docs doctest"
 
-# the notebooks point QIBOLAB_PLATFORMS to examples/platforms themselves
+# the calibration notebooks point QIBOLAB_PLATFORMS to examples/platforms
+# themselves; the remote ones need a cluster, so they are not executed
 [tool.poe.tasks.examples]
 help = "Execute the examples, and export them to HTML for the documentation"
 sequence = [
-  { cmd = "marimo export html examples/marimo_notebook.py -o docs/source/_extra/examples/marimo_notebook.html -f" },
-  { cmd = "jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=300 --output-dir docs/source/_extra/examples examples/jupyter_notebook.ipynb" },
+  { cmd = "marimo export html examples/marimo/calibration.py -o docs/source/_extra/examples/marimo/calibration.html -f" },
+  { cmd = "jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=300 --output-dir docs/source/_extra/examples/jupyter examples/jupyter/calibration.ipynb" },
 ]
 
 [tool.pytest.ini_options]

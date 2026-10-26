@@ -11,8 +11,9 @@ documentation, and workflows reusing `qiboteam/workflows@uv`.
   `latest-stable.yml` workflow (`latest` from `main`, `stable` from tags), live
   at <https://qibo.science/qibocal-widgets/latest/>.
 - **Executable documentation**:
-  - `poe examples` (part of `poe docs`) executes both example notebooks, which
-    tour all the user-facing features on the simulated `qutrits` platform of
+  - `poe examples` (part of `poe docs`) executes the `calibration` example
+    notebooks (the `remote` ones need a cluster: they were checked against the
+    fake cluster tools of the tests), which tour the user-facing features on the simulated `qutrits` platform of
     qibolab-simulator (copied in `examples/platforms`, simulator installed by
     the `examples` group, included in `docs`), and exports them with their
     outputs (`marimo export html`, `jupyter nbconvert --execute`, with the

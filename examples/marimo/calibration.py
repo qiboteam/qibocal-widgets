@@ -24,10 +24,9 @@ with app.setup(hide_code=True):
         reports_dir,
     )
     from qibocal_widgets.marimo import Marimo, display, show_data, show_reports, wrap
-    from qibocal_widgets.remote import Connection, Remote
 
     HERE = Path(__file__).resolve().parent
-    os.environ["QIBOLAB_PLATFORMS"] = str(HERE / "platforms")
+    os.environ["QIBOLAB_PLATFORMS"] = str(HERE.parent / "platforms")
 
     def qutrits():
         """A fresh simulated platform: two coupled qutrits.
@@ -49,7 +48,7 @@ def _():
 
     A tour of the features of `qibocal-widgets`, on a simulated platform: the
     `qutrits` platform of [qibolab-simulator](https://github.com/qiboteam/qibolab-simulator),
-    copied in `platforms/` next to this notebook.
+    copied in the `platforms/` folder of the examples.
 
     The executor is a drop-in replacement of Qibocal's, composed of
     **frontends** (displaying every output), a **runner** (where the steps run),
@@ -357,56 +356,12 @@ def _(attached, loaded):
 @app.cell(hide_code=True)
 def _():
     mo.md("""
-    ## 8. Remote execution
+    ## Next: remote execution
 
-    The `Remote` runner sends the acquisitions to the machine with the
-    instruments, through SLURM and SSH, while fit and report run locally.
-    Without options it dispatches nothing, so the same notebook also runs on the
-    compute node itself, as here.
+    To run the same protocols on a machine with access to the instruments,
+    from a laptop or an access node, see the `remote` notebook next to this
+    one.
     """)
-    return
-
-
-@app.cell
-def _():
-    _local = Executor(
-        qutrits(), targets=[0], update=False, runner=Remote(), frontends=[Marimo()]
-    )
-    with _local:
-        _passthrough = _local(protocols.ramsey(delay=(10, 1000, 100)), nshots=200)
-    _passthrough
-    return
-
-
-@app.cell(hide_code=True)
-def _():
-    mo.md("""
-    On a laptop, the connection reaches the access node over SSH, and submits
-    every acquisition to the queue. Connections can also be stored by name
-    (`save_connection`), in the configuration shared with Qibocamp. The
-    environment on the remote machine is installed separately
-    (`remote.install()`), and the queue can be followed from here.
-    """)
-    return
-
-
-@app.cell
-def _():
-    lab = Remote(
-        Connection(
-            ssh="-J bastion me@login",
-            queue="qpu",
-            slurm="--time=10",
-            platform="qutrits",
-            requirements="qibocal @ git+https://github.com/qiboteam/qibocal.git@protodev",
-        )
-    )
-    _view = (
-        Remote(queue=lab.connection.queue).monitor()
-        if shutil.which("squeue")
-        else mo.md("*No SLURM here: `lab.monitor()` would show the queue of `qpu`.*")
-    )
-    mo.vstack([mo.md(f"`{lab!r}`"), _view])
     return
 
 
