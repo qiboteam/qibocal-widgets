@@ -32,4 +32,5 @@ First development version, targeting the executor interface of Qibocal's
 - `Remote.queue()` and `Remote.monitor()`: the SLURM queue of the connection,
   with Qibocamp's query, and a refreshable view highlighting the user's
   jobs and the runner's (named `qibocal-widgets-<action>`).
-- Documentation, with the examples executed on Qibocal's mock platform.
+- Example notebooks for Marimo and Jupyter, touring all the features on a
+  simulated platform, executed in the documentation.

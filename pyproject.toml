@@ -44,6 +44,12 @@ docs = [
   # executing and exporting the examples
   "nbconvert>=7.16.0,<8.0.0",
   "ipykernel>=6.29.0,<8.0.0",
+  { include-group = "examples" },
+]
+# the example notebooks, simulating the `qutrits` platform of qibolab-simulator
+examples = [
+  "qibolab-simulator",
+  "marimo>=0.25.0",
 ]
 dev = [
   "ipykernel>=6.0.0",
@@ -54,6 +60,8 @@ dev = [
 # The package targets the executor interface currently developed on the
 # `protodev` branch of Qibocal, not yet released on PyPI.
 qibocal = { git = "https://github.com/qiboteam/qibocal.git", branch = "protodev" }
+# not on PyPI
+qibolab-simulator = { git = "https://github.com/qiboteam/qibolab-simulator.git" }
 
 [build-system]
 requires = ["uv_build>=0.12.9,<0.14.0"]
@@ -84,15 +92,13 @@ docs-html = "make -C docs html"
 docs-clean = "make -C docs clean"
 test-docs = "make -C docs doctest"
 
-# executed on Qibocal's mock platform, vendored for the tests
+# the notebooks point QIBOLAB_PLATFORMS to examples/platforms themselves
 [tool.poe.tasks.examples]
 help = "Execute the examples, and export them to HTML for the documentation"
 sequence = [
-  { cmd = "marimo export html examples/marimo_ramsey.py -o docs/source/_extra/examples/marimo_ramsey.html -f" },
-  { cmd = "jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=300 --output-dir docs/source/_extra/examples examples/jupyter_ramsey.ipynb" },
+  { cmd = "marimo export html examples/marimo_notebook.py -o docs/source/_extra/examples/marimo_notebook.html -f" },
+  { cmd = "jupyter nbconvert --to html --execute --ExecutePreprocessor.timeout=300 --output-dir docs/source/_extra/examples examples/jupyter_notebook.ipynb" },
 ]
-# docs/hooks: see its sitecustomize.py, about qibolab's signal handlers
-env = { QIBOLAB_PLATFORMS = "${POE_ROOT}/tests/platforms", PYTHONPATH = "${POE_ROOT}/docs/hooks" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests/"]

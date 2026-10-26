@@ -219,9 +219,8 @@ executor with the frontend, e.g. ``executor.fit(completed)``.
 Examples
 --------
 
-Complete notebooks are available in the
-`examples <https://github.com/qiboteam/qibocal-widgets/tree/main/examples>`_
-folder of the repository.
+Two complete notebooks, for Marimo and Jupyter, tour all the features on a
+simulated platform: see :doc:`../examples`, with their executed outputs.
 
 Extending the executor
 ----------------------

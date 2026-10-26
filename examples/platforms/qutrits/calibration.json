@@ -1,0 +1,26 @@
+{
+  "single_qubits": {
+    "0": {
+      "qubit": {
+        "frequency_01": 4813586970.0,
+        "frequency_12": 4596586970.0,
+        "maximum_frequency": 4813586970.0,
+        "asymmetry": 0.0,
+        "sweetspot": 0.405
+      },
+      "t1": [37000.0, null],
+      "t2": [23000.0, null]
+    },
+    "1": {
+      "qubit": {
+        "frequency_01": 5518133438.0,
+        "frequency_12": 5306133438.0,
+        "maximum_frequency": 5518133438.0,
+        "asymmetry": 0.0,
+        "sweetspot": 0.582
+      },
+      "t1": [32000.0, null],
+      "t2": [9000.0, null]
+    }
+  }
+}

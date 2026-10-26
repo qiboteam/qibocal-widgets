@@ -153,3 +153,6 @@ htmlcov/
 # Sphinx build
 docs/build/
 docs/source/_extra/
+
+# outputs of the example notebooks
+examples/var/

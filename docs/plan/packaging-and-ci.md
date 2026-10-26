@@ -11,10 +11,12 @@ documentation, and workflows reusing `qiboteam/workflows@uv`.
   `latest-stable.yml` workflow (`latest` from `main`, `stable` from tags), live
   at <https://qibo.science/qibocal-widgets/latest/>.
 - **Executable documentation**:
-  - `poe examples` (part of `poe docs`) executes both example notebooks on the
-    vendored mock platform, and exports them with their outputs (`marimo export
-    html`, `jupyter nbconvert --execute`, with the widget state embedded); the
-    *Examples* page links them. On GitHub's runners the whole documentation
+  - `poe examples` (part of `poe docs`) executes both example notebooks, which
+    tour all the user-facing features on the simulated `qutrits` platform of
+    qibolab-simulator (copied in `examples/platforms`, simulator installed by
+    the `examples` group, included in `docs`), and exports them with their
+    outputs (`marimo export html`, `jupyter nbconvert --execute`, with the
+    widget state embedded); the *Examples* page links them. On GitHub's runners the whole documentation
     build, examples included, takes under a minute, and the pages are live.
   - The platform state guide contains doctests on the mock platform, run by
     `poe test-docs`, enabled in the test workflow on Linux.
@@ -77,9 +79,9 @@ documentation).
 - **qibolab signal handlers**: creating a qibolab platform replaces the
   process-wide `SIGINT` and `SIGTERM` handlers (to disconnect instruments when a
   job is cancelled). Marimo relies on those signals to shut its runtime down,
-  so `marimo export html` hangs on notebooks creating a platform; the
-  documentation build neutralizes the handlers for the mock platform through
-  `docs/hooks/sitecustomize.py`. The same replacement may interfere with
+  so `marimo export html` hangs on notebooks creating a platform. The example
+  notebooks restore the handlers right after creating each platform, as
+  qibolab-simulator's notebook does. The same replacement interferes with
   interrupting cells in live notebooks: worth raising upstream, in qibolab.
 - **Kernel messaging in sandboxed environments**: executing the Jupyter
   example occasionally stalls for minutes in some sandboxed environments (the
