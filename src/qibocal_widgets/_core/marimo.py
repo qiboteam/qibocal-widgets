@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 import marimo as mo
+from marimo._runtime.state import State
 from qibocal.auto.task import Completed as QibocalCompleted
 
 from . import layout
@@ -109,17 +111,86 @@ class Marimo(Frontend):
     def render(self, completed: QibocalCompleted) -> Any:
         return display(completed)
 
-    def render_pending(self, pending: Pending) -> Any:
-        """The state, or the result once completed.
+    def background(self) -> tuple[type[Pending], type[threading.Thread]] | None:
+        """Reactive pending executions, run in ``mo.Thread``, in notebooks."""
+        if not mo.running_in_notebook():
+            return None
+        return MarimoPending, mo.Thread
 
-        Marimo outputs do not change after the cell ran: display the
-        execution again, or ``await`` it, to see its result.
+    def render_pending(self, pending: Pending) -> Any:
+        """A spinner while running, then the result (or the error).
+
+        Displayed as the output of the cell which submitted it, the spinner is
+        replaced by the result when the execution completes (unless other
+        pending executions are displayed in the same cell).
         """
+        if isinstance(pending, MarimoPending):
+            cell = _cell_id()
+            pending._rendered_in = cell
+            _RENDERED.setdefault(cell, set()).add(id(pending))
         if pending.status == DONE:
             return display(pending.result())
-        kind = "danger" if pending.status == FAILED else "neutral"
-        hint = "" if pending.done() else " `await` it for the result."
-        return mo.callout(mo.md(f"**{pending.describe()}**.{hint}"), kind=kind)
+        if pending.status == FAILED:
+            return mo.callout(mo.md(f"**{pending.describe()}**"), kind="danger")
+        return mo.status.spinner(title=pending.name, subtitle=pending.describe())
+
+
+_RENDERED: dict[str | None, set[int]] = {}
+"""Pending executions rendered in each cell (by identity)."""
+
+
+def _cell_id() -> str | None:
+    """The cell being executed, if any."""
+    try:
+        from marimo._runtime.context import get_context
+
+        return get_context().execution_context.cell_id
+    except Exception:  # noqa: BLE001 - outside of a cell, or a script
+        return None
+
+
+class MarimoPending(Pending, State):
+    """A pending execution which is also marimo reactive state.
+
+    Every cell referencing it (e.g. ``ramsey = pending()``) runs again when the
+    execution completes, as for any ``mo.state`` getter; together with
+    ``mo.stop``, downstream cells wait for the result without blocking the
+    notebook::
+
+        ramsey = pending()
+        mo.stop(ramsey is None, pending)  # the spinner, while running
+
+    It is created by :meth:`Executor.submit
+    <qibocal_widgets.Executor.submit>` in notebooks with the
+    :class:`Marimo` frontend, and run in a ``mo.Thread``.
+    """
+
+    def __init__(self, bound):
+        Pending.__init__(self, bound)
+        State.__init__(self, None)
+        self._submitted_in = _cell_id()
+        self._rendered_in: str | None = None
+
+    def __call__(self):
+        return Pending.__call__(self)
+
+    def _completed(self) -> None:
+        thread = mo.current_thread()
+        stale = getattr(thread, "should_exit", False)
+        alone = _RENDERED.get(self._rendered_in, set()) == {id(self)}
+        if (
+            not stale
+            and alone
+            and self._submitted_in is not None
+            and self._rendered_in == self._submitted_in
+        ):
+            # the submitting cell displayed its spinner, and no other one:
+            # show the result there
+            mo.output.replace(
+                display(self.result()) if self.status == DONE else self._display_()
+            )
+        # rerun the cells referencing this execution
+        self._set_value(self.status)
 
 
 def wrap(completed: QibocalCompleted) -> Completed:

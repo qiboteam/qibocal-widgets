@@ -12,6 +12,8 @@ middleware result hooks and displayed by all the frontends.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import threading
 from collections.abc import Iterable, Iterator
@@ -30,6 +32,8 @@ from .frontend import Frontend
 from .middleware import Middleware
 from .output import REPORTS_DIR, default_path
 from .pending import ACQUIRING, PROCESSING, Pending
+from .protocols import reference, registered_name
+from .remote.worker import parameters_document
 from .runner import Local, Runner
 from .session import Session
 from .state import PlatformState
@@ -101,6 +105,7 @@ class Executor(QibocalExecutor):
         self._order = threading.Condition()
         self._submitted = 0
         self._processed = 0
+        self._running: dict[str, Pending] = {}
         self.runner: Runner = _check(
             [runner if runner is not None else Local()], Runner, "runners"
         )[0]
@@ -273,12 +278,20 @@ class Executor(QibocalExecutor):
             return self.session.ensure(self, completed)
 
     def submit(
-        self, bound: BoundProtocol, skip_fit: bool = False, **kwargs: Any
+        self,
+        bound: BoundProtocol,
+        skip_fit: bool = False,
+        *,
+        reuse: bool = False,
+        **kwargs: Any,
     ) -> Pending:
         """Execute a protocol in the background, as ``executor(bound)``.
 
         Returns immediately, leaving the notebook free while the execution
-        runs: get its result with ``pending.result()``, or ``await pending``.
+        runs: get its result with ``pending.result()``, ``await pending``, or
+        peek at it with ``pending()``. In Marimo notebooks, the pending
+        execution is reactive state: cells referencing it run again when it
+        completes.
 
         - With a remote runner, acquisitions are independent jobs, queued
           together; with the local runner, they wait for each other, sharing
@@ -292,22 +305,88 @@ class Executor(QibocalExecutor):
         Args:
             bound: the protocol to execute.
             skip_fit: as in ``executor(bound)``.
+            reuse: return an identical execution instead of acquiring again,
+                if any: one still running, or one recorded in the session
+                (loaded from disk; only for protocols registered in
+                ``qibocal.protocols``, which Qibocal can load back). Executions are identical with the same
+                protocol, parameters, overrides, targets, and platform state.
+                Useful where cells may run again unintentionally, as in
+                reactive notebooks.
             **kwargs: execution overrides, as in ``executor(bound)``.
         """
-        pending = Pending(bound)
+        pending_type, thread_type = Pending, threading.Thread
         for frontend in self.frontends:
-            pending.views[frontend.protocol] = frontend.render_pending
+            found = frontend.background()
+            if found is not None:
+                pending_type, thread_type = found
+                break
+
+        key = self._reuse_key(bound, skip_fit, kwargs) if reuse else None
+        if key is not None:
+            with self._order:
+                running = self._running.get(key)
+            if running is not None:
+                return running
+            # only registered protocols can be loaded back from disk
+            recorded = self.session is not None and registered_name(bound.protocol)
+            folder = self.session.find(key) if recorded else None
+            if folder is not None:
+                pending = self._pending(pending_type, bound)
+                pending._resolve(self._reload(folder))
+                return pending
+
+        pending = self._pending(pending_type, bound)
         with self._order:
             ticket = self._submitted
             self._submitted += 1
-        thread = threading.Thread(
+            if key is not None:
+                self._running[key] = pending
+        thread = thread_type(
             target=self._background,
-            args=(pending, ticket, bound, skip_fit, kwargs),
+            args=(pending, ticket, bound, skip_fit, kwargs, key),
             name=f"qibocal-widgets-{pending.name}-{ticket}",
             daemon=True,
         )
         thread.start()
         return pending
+
+    def _pending(self, pending_type: type[Pending], bound: BoundProtocol) -> Pending:
+        pending = pending_type(bound)
+        for frontend in self.frontends:
+            pending.views[frontend.protocol] = frontend.render_pending
+        return pending
+
+    def _reuse_key(
+        self, bound: BoundProtocol, skip_fit: bool, kwargs: dict
+    ) -> str | None:
+        """Identity of an execution, for reuse; ``None`` if not identifiable."""
+        protocol = reference(bound.protocol)
+        if protocol is None:
+            return None
+        targets = kwargs.get("targets", self.targets)
+        try:
+            document = {
+                "protocol": protocol,
+                "parameters": parameters_document(bound.parameters),
+                "overrides": parameters_document(
+                    {k: v for k, v in kwargs.items() if k != "targets"}
+                ),
+                "targets": parameters_document(targets),
+                "skip_fit": skip_fit,
+                "state": self.runner.platform_state(self),
+            }
+        except TypeError:
+            return None
+        text = json.dumps(document, sort_keys=True)
+        return hashlib.sha256(text.encode()).hexdigest()
+
+    def _reload(self, folder) -> Completed:
+        """A recorded execution, loaded and reported again."""
+        completed = self.load(folder)
+        protocol = completed.bound.protocol
+        if completed.results is not None and protocol.report is not None:
+            completed = self.report(completed)
+        return completed
 
     def _background(
         self,
@@ -316,6 +395,7 @@ class Executor(QibocalExecutor):
         bound: BoundProtocol,
         skip_fit: bool,
         kwargs: dict,
+        key: str | None = None,
     ) -> None:
         acquired = error = None
         try:
@@ -332,7 +412,11 @@ class Executor(QibocalExecutor):
         try:
             if error is not None:
                 raise error
-            completed = self._complete(self._finish(self._record(acquired)), skip_fit)
+            recorded = self._record(acquired)
+            if key is not None and self.session is not None:
+                with self._records:
+                    self.session.tag(recorded, key)
+            completed = self._complete(self._finish(recorded), skip_fit)
         except BaseException as exception:  # noqa: BLE001 - reported to the caller
             pending._fail(exception)
         else:
@@ -340,6 +424,7 @@ class Executor(QibocalExecutor):
         finally:
             with self._order:
                 self._processed += 1
+                self._running.pop(key, None)
                 self._order.notify_all()
 
     def _complete(self, completed: Completed, skip_fit: bool) -> Completed:

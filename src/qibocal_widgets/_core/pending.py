@@ -35,12 +35,17 @@ class Pending:
 
         completed = pending.result()
 
-    or asynchronously, where top-level ``await`` is available (e.g. in Marimo)::
+    asynchronously, where top-level ``await`` is available::
 
         completed = await pending
 
+    or peek at it, without blocking: ``pending()`` is the result, or ``None``
+    while running (and raises if the execution failed).
+
     Displayed, it shows its state; frontends may update the display when the
-    execution completes.
+    execution completes. Frontends may also provide a subclass (see
+    :meth:`Frontend.background <qibocal_widgets.Frontend.background>`), e.g.
+    reactive in Marimo.
     """
 
     def __init__(self, bound: BoundProtocol):
@@ -86,12 +91,27 @@ class Pending:
     def _resolve(self, completed: Completed) -> None:
         self.future.set_result(completed)
         self._set(DONE)
+        self._completed()
 
     def _fail(self, error: BaseException) -> None:
         self.future.set_exception(error)
         self._set(FAILED)
+        self._completed()
+
+    def _completed(self) -> None:
+        """Hook run once, in the background thread, when the execution ends."""
 
     # -- results -------------------------------------------------------------------
+
+    def __call__(self) -> Completed | None:
+        """The result if available, ``None`` otherwise, without blocking.
+
+        Raises:
+            Exception: the error of the execution, if it failed.
+        """
+        if not self.future.done():
+            return None
+        return self.future.result()
 
     def done(self) -> bool:
         """Whether the execution completed, successfully or not."""

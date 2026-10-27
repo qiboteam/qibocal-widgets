@@ -162,3 +162,6 @@ examples/*/var/
 .devenv.flake.nix
 .direnv/
 devenv.local.nix
+
+# marimo session caches
+__marimo__/

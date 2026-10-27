@@ -50,6 +50,8 @@ __all__ = ["Session", "SessionExists"]
 
 DATA = "data"
 """Subfolder of the task folders."""
+KEYFILE = "qibocal-widgets.json"
+"""Reuse key of an execution, in its task folder (ignored by Qibocal)."""
 
 
 class SessionExists(FileExistsError):
@@ -272,6 +274,23 @@ class Session:
         self._stats(recorded)
         self._dump()
         return recorded
+
+    def tag(self, completed: Completed, key: str) -> None:
+        """Record the reuse key of an execution (see ``Executor.submit``)."""
+        if self.contains(completed):
+            (Path(completed.path) / KEYFILE).write_text(json.dumps({"key": key}))
+
+    def find(self, key: str) -> Path | None:
+        """The folder of the execution recorded with a reuse key, if any."""
+        if not self.started:
+            return None
+        for file in sorted((self.path / DATA).glob(f"*/{KEYFILE}")):
+            try:
+                if json.loads(file.read_text()).get("key") == key:
+                    return file.parent
+            except (OSError, ValueError):
+                continue
+        return None
 
     def results(self, completed: Completed) -> None:
         """Write the fit results of a recorded execution."""

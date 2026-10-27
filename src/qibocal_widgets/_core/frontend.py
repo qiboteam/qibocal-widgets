@@ -8,6 +8,7 @@ order is irrelevant and several coexist on the same execution.
 
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from qibocal.auto.task import Completed as QibocalCompleted
@@ -45,6 +46,15 @@ class Frontend:
                 views interact with the executor override this method.
         """
         return convert(completed).with_view(self.protocol, self.render)
+
+    def background(self) -> tuple[type[Pending], type[threading.Thread]] | None:
+        """The pending type and thread type of background executions.
+
+        For frontends needing them integrated with their runtime (e.g. Marimo's
+        reactive state and threads); ``None`` keeps the defaults. The first
+        frontend providing them is used.
+        """
+        return None
 
     def render_pending(self, pending: Pending) -> Any:
         """Displayable object for an execution running in the background.

@@ -76,7 +76,8 @@ extend-select = ["I", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
 # Marimo notebooks use bare expressions to render output, and generated `return`s
-"examples/*.py" = ["B018", "PLR1711"]
+"examples/*/*.py" = ["B018", "PLR1711"]
+"tests/notebooks/*.py" = ["B018", "PLR1711"]
 
 [tool.poe.tasks]
 test = "pytest"

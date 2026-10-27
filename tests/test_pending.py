@@ -191,7 +191,9 @@ def test_frontends(bound):
     )
     pending = executor.submit(bound)
     wait_for(lambda: pending.status == "acquiring")
-    assert "acquiring" in pending._display_().text
+    spinner = pending._display_()
+    assert type(spinner).__name__ == "spinner"  # outside notebooks: no reactivity
+    assert pending() is None
     box = pending.views["_repr_mimebundle_"](pending)
     assert isinstance(box, widgets.VBox)
     assert "acquiring" in box.children[0].value
@@ -211,3 +213,130 @@ def test_repr(bound):
     runner.gate(bound.parameters.npoints).set()
     pending.result(10)
     assert isinstance(pending.result().data, FakeData)
+
+
+def test_peek(bound):
+    runner = Gated()
+    executor = Executor(None, targets=TARGETS, update=False, runner=runner)
+    pending = executor.submit(bound)
+    assert pending() is None
+    runner.gate(bound.parameters.npoints).set()
+    completed = pending.result(10)
+    assert pending() is completed
+
+
+def test_peek_failure(bound):
+    class Broken(Runner):
+        def acquire(self, executor, bound, **kwargs):
+            raise RuntimeError("boom")
+
+    pending = Executor(None, targets=TARGETS, runner=Broken()).submit(bound)
+    with pytest.raises(RuntimeError):
+        pending.result(10)
+    with pytest.raises(RuntimeError, match="boom"):
+        pending()
+
+
+class Counting(Runner):
+    """Count the acquisitions."""
+
+    concurrent = True
+
+    def __init__(self):
+        self.count = 0
+        self.gate = threading.Event()
+
+    def acquire(self, executor, bound, **kwargs):
+        self.count += 1
+        assert self.gate.wait(10)
+        return QibocalExecutor.acquire(executor, bound, **kwargs)
+
+
+def test_reuse_running(bound):
+    runner = Counting()
+    executor = Executor(None, targets=TARGETS, update=False, runner=runner)
+    first = executor.submit(bound, reuse=True)
+    assert executor.submit(bound, reuse=True) is first
+    assert executor.submit(bound) is not first  # without reuse, acquired again
+    other = executor.submit(fake(npoints=5), reuse=True)
+    assert other is not first  # different parameters
+    runner.gate.set()
+    first.result(10), other.result(10)
+    wait_for(lambda: runner.count == 3)
+
+
+def test_reuse_recorded(tmp_path, monkeypatch):
+    from conftest import PLATFORMS
+    from qibocal import create_calibration_platform, protocols
+
+    from qibocal_widgets import Session
+
+    monkeypatch.setenv("QIBOLAB_PLATFORMS", str(PLATFORMS))
+    bound = protocols.ramsey_signal(
+        delay_between_pulses_start=10,
+        delay_between_pulses_end=100,
+        delay_between_pulses_step=30,
+    )
+    runner = Counting()
+    runner.gate.set()
+    path = tmp_path / "session"
+    executor = Executor(
+        create_calibration_platform("mock"),
+        path=path,
+        targets=TARGETS,
+        update=False,
+        runner=runner,
+    )
+    first = executor.submit(bound, reuse=True).result(10)
+    assert (first.path / "qibocal-widgets.json").is_file()
+
+    again = executor.submit(bound, reuse=True)
+    assert again.done()  # loaded from disk, at once
+    assert runner.count == 1
+    assert again().path == first.path
+    assert set(again().reports) == set(TARGETS)
+
+    # after a restart, attaching the session
+    restarted = Executor(
+        create_calibration_platform("mock"),
+        session=Session.attach(path),
+        targets=TARGETS,
+        update=False,
+        runner=runner,
+    )
+    assert restarted.submit(bound, reuse=True)().path == first.path
+    assert runner.count == 1
+    # with other overrides, acquired again
+    restarted.submit(bound, reuse=True, nshots=7).result(10)
+    assert runner.count == 2
+
+
+def test_reuse_unregistered_not_from_disk(tmp_path, bound):
+    """Unregistered protocols cannot be loaded back: acquired again."""
+    runner = Counting()
+    runner.gate.set()
+    executor = Executor(
+        None, path=tmp_path / "s", targets=TARGETS, update=False, runner=runner
+    )
+    executor.submit(bound, reuse=True).result(10)
+    executor.submit(bound, reuse=True).result(10)
+    assert runner.count == 2
+
+
+def test_reuse_platform_state(monkeypatch, bound):
+    from conftest import PLATFORMS
+    from qibocal import create_calibration_platform
+
+    monkeypatch.setenv("QIBOLAB_PLATFORMS", str(PLATFORMS))
+    runner = Counting()
+    runner.gate.set()
+    executor = Executor(
+        create_calibration_platform("mock"),
+        targets=TARGETS,
+        update=False,
+        runner=runner,
+    )
+    executor.submit(bound, reuse=True).result(10)
+    executor.platform_state.update({"configs.0/drive.frequency": 4.2e9})
+    executor.submit(bound, reuse=True).result(10)
+    assert runner.count == 2  # the platform changed: not identical
