@@ -2083,7 +2083,7 @@ wheels = [
 [[package]]
 name = "qibocal"
 version = "0.2.7"
-source = { git = "https://github.com/qiboteam/qibocal.git?branch=protodev#ae0e797a8c93a1110737f7f75586e628e4a2e543" }
+source = { git = "https://github.com/qiboteam/qibocal.git?branch=protodev#f80b0012afb0cb727454e3c9fce36bb33885bd06" }
 dependencies = [
     { name = "click" },
     { name = "jinja2" },
