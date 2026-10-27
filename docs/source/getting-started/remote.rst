@@ -144,22 +144,58 @@ Background execution
 
 ``executor(bound)`` blocks until the job has gone through the queue.
 ``executor.submit(bound)`` returns at once, with a
-:class:`~qibocal_widgets.Pending` execution, so that the notebook stays free:
+:class:`~qibocal_widgets.Pending` execution, so that the notebook stays
+interactive while the job waits: the platform explorer and the queue monitor
+keep working.
 
 .. code-block:: python
 
     pending = executor.submit(protocols.ramsey(delay=(10, 1000, 100)), nshots=500)
-    pending  # displays its state: in Jupyter, replaced by the result when ready
 
-    completed = pending.result()  # synchronous: waits for the result
-    completed = await pending  # with top-level await, e.g. in Marimo
+    pending()  # the result, or None while running: never blocks
+    pending.result()  # waits for the result
+    await pending  # with top-level await
 
 Several submissions are queued together. Their results are recorded, fitted,
 reported, and update the platform in submission order, whatever the order
 their jobs complete in; each acquisition uses the platform state at the time
 it starts, so acquisitions submitted together do not see each other's updates.
-In Marimo, ``await asyncio.gather(executor.submit(a), executor.submit(b))``
-waits for several at once.
+
+**In Marimo**, background executions integrate with the reactive runtime, with
+nothing to set up: they run in a ``mo.Thread``, and a pending execution is
+reactive state, so that every cell referencing it runs again when it
+completes. Displayed as the output of the cell submitting it, it shows a
+spinner, replaced by the result when ready. Downstream cells wait for it with
+``mo.stop``, without blocking anything:
+
+.. code-block:: python
+
+    # one cell
+    pending = executor.submit(protocols.ramsey(delay=(10, 1000, 100)), nshots=500)
+    pending  # a spinner, then the result
+
+    # another cell: runs again when the execution completes
+    ramsey = pending()
+    mo.stop(ramsey is None, mo.md("*Waiting for the acquisition…*"))
+    ramsey.results
+
+It is a ``mo.state`` getter like any other, for any other use of Marimo's
+reactivity. (``await pending`` also works, but holds the notebook until the
+result arrives.)
+
+**In Jupyter**, the pending execution's display updates by itself when the
+result arrives, and ``pending.result()`` waits for it where needed; dependent
+cells do not run again by themselves, as usual in Jupyter.
+
+**Avoiding repeated acquisitions.** Notebooks run cells again, unintentionally
+too (in Marimo, whenever an upstream cell changes). With ``reuse=True``,
+``submit`` returns an identical execution instead of acquiring again: one still
+running, or one recorded in the session, loaded from disk. Executions are
+identical with the same protocol, parameters, overrides, targets, and platform
+state: after an update, the protocol is acquired again. Nothing is cached
+besides the session itself, which records a small key next to each execution;
+reusing recorded executions works across kernel restarts (attaching the
+session), for protocols registered in Qibocal, which it can load back.
 
 The job is held by a background thread and an open SSH connection: the kernel
 and the connection must stay alive until it completes. Detached jobs,

@@ -62,7 +62,13 @@ blocking `result()` and `await` support), runs the workflow in a thread, and
 processes executions in submission order; runners declare whether their
 acquisitions may overlap (`Runner.concurrent`). Frontends render pending
 executions (`Frontend.render_pending`): Jupyter replaces the state with the
-result when ready, on the kernel's main thread; Marimo outputs are static, so
-the result is obtained with `await`. Remaining: detached remote jobs
+result when ready, on the kernel's main thread. In Marimo
+(`Frontend.background`), executions run in `mo.Thread` and pending executions
+are `mo.state` getters (a `State` subclass): cells referencing them run again
+on completion, `pending()` peeks without blocking, and a spinner displayed by
+the submitting cell is replaced by the result; nothing blocks, so explorers and
+monitors stay interactive. `reuse=True` avoids repeated acquisitions through the
+session records (a key file per task), instead of caching data with
+`mo.cache`. Remaining: detached remote jobs
 ([#8](https://github.com/qiboteam/qibocal-widgets/issues/8)), cancellation of
 pending executions.

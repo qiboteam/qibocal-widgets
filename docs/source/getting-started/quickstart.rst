@@ -226,9 +226,11 @@ Background execution
 --------------------
 
 ``executor.submit(bound)`` runs ``executor(bound)`` in the background, and
-returns a :class:`~qibocal_widgets.Pending` execution at once: get its result
-with ``pending.result()``, or ``await pending`` where top-level ``await`` is
-available (Marimo). Executions are processed in submission order; with the
+returns a :class:`~qibocal_widgets.Pending` execution at once: peek at it with
+``pending()``, wait for it with ``pending.result()``, or ``await pending``. In
+Marimo, it is reactive state: cells referencing it run again when it completes.
+``reuse=True`` returns an identical execution, running or recorded, instead of
+acquiring again. Executions are processed in submission order; with the
 local runner, acquisitions wait for each other, sharing the instruments, and
 manage the platform connection themselves (no ``with executor:`` needed). It
 matters most for remote execution, where jobs wait in a queue: see

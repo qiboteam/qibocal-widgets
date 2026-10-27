@@ -4,7 +4,6 @@ __generated_with = "0.25.1"
 app = marimo.App(width="medium")
 
 with app.setup(hide_code=True):
-    import asyncio
     import json
     import os
     import shutil
@@ -159,11 +158,14 @@ def _():
     ## 4. Acquiring in the background
 
     The acquisition is a job in the queue (named `qibocal-widgets-acquire`).
-    `executor.submit` returns at once, with a *pending* execution, so the
-    notebook stays free while the job waits in the queue; the data come back,
-    are recorded in the session, and are fitted and reported here.
+    `executor.submit` returns at once, so the notebook stays interactive while
+    the job waits: the platform explorer and the queue monitor keep working.
+    The cell shows a spinner, replaced by the result when it arrives; the data
+    are recorded in the session, fitted and reported here.
 
-    `executor(bound)` is the synchronous alternative.
+    With `reuse=True`, running the cell again (e.g. after editing an upstream
+    cell) returns the identical execution instead of acquiring again: the one
+    still running, or the one recorded in the session.
     """)
     return
 
@@ -171,7 +173,9 @@ def _():
 @app.cell
 def _(executor, start):
     assert start is not None
-    pending = executor.submit(protocols.ramsey(delay=(10, 1000, 100)), nshots=500)
+    pending = executor.submit(
+        protocols.ramsey(delay=(10, 1000, 100)), nshots=500, reuse=True
+    )
     pending
     return (pending,)
 
@@ -179,17 +183,20 @@ def _(executor, start):
 @app.cell(hide_code=True)
 def _():
     mo.md("""
-    Marimo supports top-level `await`: the cell below waits for the result,
-    without blocking the notebook's event loop.
+    In Marimo, a pending execution is reactive state: the cells referencing it
+    run again when it completes. `pending()` is the result, or `None` while
+    running: with `mo.stop`, the cell waits without blocking the notebook.
+    (`await pending` works too, but holds the notebook until the result.)
     """)
     return
 
 
 @app.cell
-async def _(executor, pending):
-    ramsey = await pending
+def _(executor, pending):
+    ramsey = pending()
+    mo.stop(ramsey is None, mo.md("*Waiting for the Ramsey acquisition…*"))
     executor.note("Acquired remotely", ramsey)
-    ramsey
+    ramsey.results
     return (ramsey,)
 
 
@@ -211,19 +218,35 @@ def _():
 
 
 @app.cell
-async def _(executor, ramsey, start):
+def _(executor, ramsey):
     assert ramsey is not None
-    rabi, check = await asyncio.gather(
-        executor.submit(
-            protocols.rabi_amplitude_signal(
-                min_amp=0.0, max_amp=0.6, step_amp=0.03, pulse_length=40
-            ),
-            nshots=500,
+    rabi = executor.submit(
+        protocols.rabi_amplitude_signal(
+            min_amp=0.0, max_amp=0.6, step_amp=0.03, pulse_length=40
         ),
-        executor.submit(protocols.ramsey(delay=(10, 1000, 100)), nshots=500),
+        nshots=500,
+        reuse=True,
     )
-    mo.vstack([rabi, check, executor.platform_state.diff(start)])
+    rabi
     return (rabi,)
+
+
+@app.cell
+def _(executor, ramsey):
+    assert ramsey is not None
+    check = executor.submit(
+        protocols.ramsey(delay=(10, 1000, 200)), nshots=500, reuse=True
+    )
+    check
+    return (check,)
+
+
+@app.cell
+def _(check, executor, rabi, start):
+    updated, checked = rabi(), check()
+    mo.stop(updated is None or checked is None, mo.md("*Waiting for both jobs…*"))
+    executor.platform_state.diff(start)
+    return (updated,)
 
 
 @app.cell(hide_code=True)
@@ -257,8 +280,8 @@ def _():
 
 
 @app.cell
-def _(executor, rabi, remote):
-    assert rabi is not None
+def _(executor, remote, updated):
+    assert updated is not None
     later = Executor(
         None,
         session=Session.attach(executor.path),

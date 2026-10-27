@@ -13,8 +13,12 @@ First development version, targeting the executor interface of Qibocal's
 ### Added
 
 - `Executor.submit`: background executions, returning a `Pending` execution
-  (blocking `result()`, or `await`), queued together with remote runners and
-  processed in submission order; displayed live in Jupyter.
+  (`pending()` to peek, blocking `result()`, or `await`), queued together with
+  remote runners and processed in submission order; displayed live in
+  Jupyter; in Marimo, run in `mo.Thread` and reactive (cells referencing it run
+  again when it completes), shown as a spinner replaced by the result.
+- `submit(..., reuse=True)`: an identical execution, running or recorded in
+  the session, is returned instead of acquiring again.
 - `platforms_dir` in remote connections: the platforms folder on the remote
   machine, replacing its `QIBOLAB_PLATFORMS`, so that a stored connection
   needs no environment variable there.
