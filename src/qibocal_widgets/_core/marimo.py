@@ -11,6 +11,7 @@ from . import layout
 from .completed import MARIMO, Completed
 from .data import data_frames
 from .frontend import Frontend
+from .pending import DONE, FAILED, Pending
 from .reports import Report, reports, reports_of
 
 __all__ = [
@@ -107,6 +108,18 @@ class Marimo(Frontend):
 
     def render(self, completed: QibocalCompleted) -> Any:
         return display(completed)
+
+    def render_pending(self, pending: Pending) -> Any:
+        """The state, or the result once completed.
+
+        Marimo outputs do not change after the cell ran: display the
+        execution again, or ``await`` it, to see its result.
+        """
+        if pending.status == DONE:
+            return display(pending.result())
+        kind = "danger" if pending.status == FAILED else "neutral"
+        hint = "" if pending.done() else " `await` it for the result."
+        return mo.callout(mo.md(f"**{pending.describe()}**.{hint}"), kind=kind)
 
 
 def wrap(completed: QibocalCompleted) -> Completed:

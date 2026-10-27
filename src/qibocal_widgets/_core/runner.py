@@ -25,6 +25,14 @@ __all__ = ["Local", "Runner"]
 class Runner:
     """Base runner: every step runs locally, as in :class:`qibocal.Executor`."""
 
+    @property
+    def concurrent(self) -> bool:
+        """Whether acquisitions may run at the same time (see ``Executor.submit``).
+
+        Local acquisitions share the instruments, so they run one at a time.
+        """
+        return False
+
     def open(self, executor: Executor) -> None:
         """Enter the execution context: connect the platform.
 

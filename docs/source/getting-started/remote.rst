@@ -139,6 +139,33 @@ in a notebook cell cannot be executed remotely.
 Failures raise :class:`~qibocal_widgets.remote.RemoteError`, carrying the
 remote traceback or error output.
 
+Background execution
+--------------------
+
+``executor(bound)`` blocks until the job has gone through the queue.
+``executor.submit(bound)`` returns at once, with a
+:class:`~qibocal_widgets.Pending` execution, so that the notebook stays free:
+
+.. code-block:: python
+
+    pending = executor.submit(protocols.ramsey(delay=(10, 1000, 100)), nshots=500)
+    pending  # displays its state: in Jupyter, replaced by the result when ready
+
+    completed = pending.result()  # synchronous: waits for the result
+    completed = await pending  # with top-level await, e.g. in Marimo
+
+Several submissions are queued together. Their results are recorded, fitted,
+reported, and update the platform in submission order, whatever the order
+their jobs complete in; each acquisition uses the platform state at the time
+it starts, so acquisitions submitted together do not see each other's updates.
+In Marimo, ``await asyncio.gather(executor.submit(a), executor.submit(b))``
+waits for several at once.
+
+The job is held by a background thread and an open SSH connection: the kernel
+and the connection must stay alive until it completes. Detached jobs,
+surviving disconnections and restarts, are planned
+(`#8 <https://github.com/qiboteam/qibocal-widgets/issues/8>`_).
+
 Queue
 -----
 

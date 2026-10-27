@@ -12,6 +12,9 @@ First development version, targeting the executor interface of Qibocal's
 
 ### Added
 
+- `Executor.submit`: background executions, returning a `Pending` execution
+  (blocking `result()`, or `await`), queued together with remote runners and
+  processed in submission order; displayed live in Jupyter.
 - `platforms_dir` in remote connections: the platforms folder on the remote
   machine, replacing its `QIBOLAB_PLATFORMS`, so that a stored connection
   needs no environment variable there.

@@ -13,8 +13,9 @@ middleware result hooks and displayed by all the frontends.
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Iterable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from functools import partial
 from typing import Any
@@ -28,6 +29,7 @@ from .completed import Completed, convert
 from .frontend import Frontend
 from .middleware import Middleware
 from .output import REPORTS_DIR, default_path
+from .pending import ACQUIRING, PROCESSING, Pending
 from .runner import Local, Runner
 from .session import Session
 from .state import PlatformState
@@ -92,6 +94,13 @@ class Executor(QibocalExecutor):
             session = Session(self.path, self.meta)
         self.session: Session | None = session
         """The session recording the executions, if any."""
+        # background executions (submit): acquisitions are serialized unless
+        # the runner is concurrent, and processed in submission order
+        self._instruments = threading.Lock()
+        self._records = threading.RLock()
+        self._order = threading.Condition()
+        self._submitted = 0
+        self._processed = 0
         self.runner: Runner = _check(
             [runner if runner is not None else Local()], Runner, "runners"
         )[0]
@@ -234,7 +243,8 @@ class Executor(QibocalExecutor):
     def _set_platform_state(self, state) -> None:
         self.runner.set_platform_state(self, state)
         if self.session is not None:
-            self.session.platform(self)
+            with self._records:
+                self.session.platform(self)
 
     def note(
         self,
@@ -259,7 +269,93 @@ class Executor(QibocalExecutor):
         """Record a step output in the session, if any."""
         if self.session is None:
             return completed
-        return self.session.ensure(self, completed)
+        with self._records:
+            return self.session.ensure(self, completed)
+
+    def submit(
+        self, bound: BoundProtocol, skip_fit: bool = False, **kwargs: Any
+    ) -> Pending:
+        """Execute a protocol in the background, as ``executor(bound)``.
+
+        Returns immediately, leaving the notebook free while the execution
+        runs: get its result with ``pending.result()``, or ``await pending``.
+
+        - With a remote runner, acquisitions are independent jobs, queued
+          together; with the local runner, they wait for each other, sharing
+          the instruments. The execution manages the platform connection
+          itself: no ``with executor:`` is needed.
+        - Executions are recorded, fitted, reported, and update the platform
+          in submission order, whatever the order their acquisitions complete
+          in. An acquisition uses the platform state at the time it starts:
+          acquisitions submitted together do not see each other's updates.
+
+        Args:
+            bound: the protocol to execute.
+            skip_fit: as in ``executor(bound)``.
+            **kwargs: execution overrides, as in ``executor(bound)``.
+        """
+        pending = Pending(bound)
+        for frontend in self.frontends:
+            pending.views[frontend.protocol] = frontend.render_pending
+        with self._order:
+            ticket = self._submitted
+            self._submitted += 1
+        thread = threading.Thread(
+            target=self._background,
+            args=(pending, ticket, bound, skip_fit, kwargs),
+            name=f"qibocal-widgets-{pending.name}-{ticket}",
+            daemon=True,
+        )
+        thread.start()
+        return pending
+
+    def _background(
+        self,
+        pending: Pending,
+        ticket: int,
+        bound: BoundProtocol,
+        skip_fit: bool,
+        kwargs: dict,
+    ) -> None:
+        acquired = error = None
+        try:
+            lock = nullcontext() if self.runner.concurrent else self._instruments
+            with lock:
+                pending._set(ACQUIRING)
+                with self:
+                    acquired = self._chain("acquire", bound, **kwargs)
+        except BaseException as exception:  # noqa: BLE001 - reported to the caller
+            error = exception
+        pending._set(PROCESSING)
+        with self._order:
+            self._order.wait_for(lambda: self._processed == ticket)
+        try:
+            if error is not None:
+                raise error
+            completed = self._complete(self._finish(self._record(acquired)), skip_fit)
+        except BaseException as exception:  # noqa: BLE001 - reported to the caller
+            pending._fail(exception)
+        else:
+            pending._resolve(completed)
+        finally:
+            with self._order:
+                self._processed += 1
+                self._order.notify_all()
+
+    def _complete(self, completed: Completed, skip_fit: bool) -> Completed:
+        """The steps following the acquisition, as in ``qibocal.Executor.__call__``."""
+        protocol = completed.bound.protocol
+        if not skip_fit and protocol.fit is not None:
+            completed = self.fit(completed)
+        if completed.results is not None and protocol.report is not None:
+            completed = self.report(completed)
+        if (
+            completed.results is not None
+            and protocol.update is not None
+            and self._update_enabled
+        ):
+            completed = self.update(completed)
+        return completed
 
     def _chain(self, step: str, *args, **kwargs) -> Any:
         """Run a step through the middleware, down to the runner."""
@@ -279,14 +375,16 @@ class Executor(QibocalExecutor):
 
     def _init(self, force: bool = False):
         if self.session is not None:
-            self.session.start(self, force)
+            with self._records:
+                self.session.start(self, force)
             self.meta = self.session.meta
         self._chain("open")
 
     def close(self):
         self._chain("close")
         if self.session is not None:
-            self.session.flush()
+            with self._records:
+                self.session.flush()
 
     def acquire(self, bound: BoundProtocol, **kwargs: Any) -> Completed:
         completed = self._chain("acquire", bound, **kwargs)
@@ -297,7 +395,8 @@ class Executor(QibocalExecutor):
     ) -> Completed:
         fitted = self._record(self._chain("fit", completed, targets=targets))
         if self.session is not None:
-            self.session.results(fitted)
+            with self._records:
+                self.session.results(fitted)
         return self._finish(fitted)
 
     def report(

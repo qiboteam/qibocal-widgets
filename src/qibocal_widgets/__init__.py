@@ -39,6 +39,7 @@ from ._core.executor import Executor
 from ._core.frontend import Frontend
 from ._core.middleware import Middleware
 from ._core.output import reports_dir
+from ._core.pending import Pending
 from ._core.reports import Report, reports, reports_of
 from ._core.runner import Local, Runner
 from ._core.session import Session, SessionExists
@@ -51,6 +52,7 @@ __all__ = [
     "Frontend",
     "Local",
     "Middleware",
+    "Pending",
     "PlatformState",
     "ReadOnlyState",
     "Report",

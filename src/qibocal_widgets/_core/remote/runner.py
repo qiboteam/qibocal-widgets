@@ -91,6 +91,11 @@ class Remote(Runner):
             return jobs.platform_state(executor.platform)
         return self.state
 
+    @property
+    def concurrent(self) -> bool:
+        """Dispatched acquisitions are independent jobs, queued together."""
+        return self.connection.dispatched
+
     def platform_name(self, executor: Executor) -> str | None:
         return self.connection.platform or super().platform_name(executor)
 

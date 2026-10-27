@@ -4,6 +4,7 @@ __generated_with = "0.25.1"
 app = marimo.App(width="medium")
 
 with app.setup(hide_code=True):
+    import asyncio
     import json
     import os
     import shutil
@@ -155,11 +156,14 @@ def _(executor):
 @app.cell(hide_code=True)
 def _():
     mo.md("""
-    ## 4. Acquiring remotely
+    ## 4. Acquiring in the background
 
-    The acquisition is a job in the queue (named `qibocal-widgets-acquire`);
-    the data come back, are recorded in the session, and are fitted and
-    reported here.
+    The acquisition is a job in the queue (named `qibocal-widgets-acquire`).
+    `executor.submit` returns at once, with a *pending* execution, so the
+    notebook stays free while the job waits in the queue; the data come back,
+    are recorded in the session, and are fitted and reported here.
+
+    `executor(bound)` is the synchronous alternative.
     """)
     return
 
@@ -167,8 +171,23 @@ def _():
 @app.cell
 def _(executor, start):
     assert start is not None
-    with executor:
-        ramsey = executor(protocols.ramsey(delay=(10, 1000, 100)), nshots=500)
+    pending = executor.submit(protocols.ramsey(delay=(10, 1000, 100)), nshots=500)
+    pending
+    return (pending,)
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md("""
+    Marimo supports top-level `await`: the cell below waits for the result,
+    without blocking the notebook's event loop.
+    """)
+    return
+
+
+@app.cell
+async def _(executor, pending):
+    ramsey = await pending
     executor.note("Acquired remotely", ramsey)
     ramsey
     return (ramsey,)
@@ -177,7 +196,12 @@ def _(executor, start):
 @app.cell(hide_code=True)
 def _():
     mo.md("""
-    ## 5. Updating the remote platform
+    ## 5. Several jobs, and remote updates
+
+    Submitted executions are queued together. They are recorded, fitted, and
+    update the platform in submission order, whatever the order their jobs
+    complete in; each acquisition uses the platform state at the time it
+    starts.
 
     Without a local platform, updates run on the access node, outside of the
     queue; the runner keeps the new state, sends it with the next jobs, and the
@@ -187,16 +211,18 @@ def _():
 
 
 @app.cell
-def _(executor, ramsey, start):
+async def _(executor, ramsey, start):
     assert ramsey is not None
-    with executor:
-        rabi = executor(
+    rabi, check = await asyncio.gather(
+        executor.submit(
             protocols.rabi_amplitude_signal(
                 min_amp=0.0, max_amp=0.6, step_amp=0.03, pulse_length=40
             ),
             nshots=500,
-        )
-    mo.vstack([rabi, executor.platform_state.diff(start)])
+        ),
+        executor.submit(protocols.ramsey(delay=(10, 1000, 100)), nshots=500),
+    )
+    mo.vstack([rabi, check, executor.platform_state.diff(start)])
     return (rabi,)
 
 

@@ -58,6 +58,9 @@ args = sys.argv[1:]
 index = args.index("python3")
 with open(os.environ["FAKE_LOG"], "a") as log:
     log.write(json.dumps({"tool": "srun", "args": args[:index]}) + "\\n")
+if "FAKE_STARTS" in os.environ:
+    with open(os.environ["FAKE_STARTS"], "a") as starts:
+        starts.write(f"{time.time()}\\n")
 time.sleep(float(os.environ.get("FAKE_SLEEP", "0")))
 os.execvp(args[index], args[index:])
 """
@@ -582,3 +585,26 @@ def test_platforms_dir(cluster, monkeypatch, mock_frequency):
     executor = Executor(None, targets=TARGETS, runner=Remote("lab"))
     completed = executor.acquire(fake(npoints=3))
     assert completed.data.scale == mock_frequency
+
+
+def test_submit_remote(cluster, tmp_path, monkeypatch, mock_frequency):
+    """Remote acquisitions are queued together, and processed in order."""
+    monkeypatch.setenv("FAKE_SLEEP", "1")
+    path = tmp_path / "session"
+    executor = Executor(
+        None,
+        path=path,
+        targets=TARGETS,
+        update=False,
+        runner=Remote(queue="chip", platform="mock"),
+    )
+    starts = tmp_path / "starts"
+    monkeypatch.setenv("FAKE_STARTS", str(starts))
+    pendings = [executor.submit(fake(npoints=n)) for n in (3, 4, 5)]
+    results = [pending.result(60) for pending in pendings]
+    # queued together: all started before the first (sleeping 1 s) finished
+    times = [float(line) for line in starts.read_text().split()]
+    assert len(times) == 3 and max(times) - min(times) < 1
+    assert [r.path.name for r in results] == ["fake-0", "fake-1", "fake-2"]
+    assert all(r.data.scale == mock_frequency for r in results)
+    assert [call["tool"] for call in cluster()].count("srun") == 3

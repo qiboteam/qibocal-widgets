@@ -132,8 +132,10 @@ timeouts, unreachable hosts, missing environments, and unavailable protocols.
    or `scancel` by job name).
 3. **Connection reuse**: one SSH connection per step; `ControlMaster`
    multiplexing would cut the latency of repeated steps.
-4. **Long queues**: a blocking `srun` keeps the notebook busy while queued. An
-   asynchronous mode (submitted job, pending execution displayed as such, then
-   completed and recorded) shares its design with background execution, see
-   [interactive-execution.md](interactive-execution.md).
+4. **Long queues**: done in part. `Executor.submit` runs executions in the
+   background (threads holding the blocking `srun`), queued together and
+   processed in submission order, with `Pending` executions displayed live
+   and awaitable. Detached jobs, surviving disconnections and kernel
+   restarts (`sbatch`, pending state in the session), are tracked in
+   [#8](https://github.com/qiboteam/qibocal-widgets/issues/8).
 5. **Worker coverage**: see [packaging-and-ci.md](packaging-and-ci.md).

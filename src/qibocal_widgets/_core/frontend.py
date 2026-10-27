@@ -16,6 +16,7 @@ from .completed import Completed, convert
 
 if TYPE_CHECKING:
     from .executor import Executor
+    from .pending import Pending
 
 __all__ = ["Frontend"]
 
@@ -44,6 +45,16 @@ class Frontend:
                 views interact with the executor override this method.
         """
         return convert(completed).with_view(self.protocol, self.render)
+
+    def render_pending(self, pending: Pending) -> Any:
+        """Displayable object for an execution running in the background.
+
+        By default, its state, or its result once completed; frontends able to
+        update a displayed output override it.
+        """
+        if pending.done() and pending.exception() is None:
+            return self.render(pending.result())
+        return pending.describe()
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"

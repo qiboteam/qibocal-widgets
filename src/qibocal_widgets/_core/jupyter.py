@@ -16,6 +16,7 @@ from . import layout
 from .completed import MIMEBUNDLE, Completed
 from .data import data_frames
 from .frontend import Frontend
+from .pending import DONE, FAILED, Pending
 from .reports import Report, reports, reports_of
 
 __all__ = [
@@ -149,6 +150,40 @@ class Jupyter(Frontend):
 
     def render(self, completed: QibocalCompleted) -> Any:
         return display(completed)
+
+    def render_pending(self, pending: Pending) -> Any:
+        """A live view: the state, replaced by the result once completed."""
+        box = widgets.VBox([])
+
+        def show(pending: Pending) -> None:
+            if pending.status == DONE:
+                box.children = [display(pending.result())]
+            elif pending.status == FAILED:
+                box.children = [widgets.HTML(f"<pre>{pending.describe()}</pre>")]
+            else:
+                box.children = [_message(pending.describe())]
+
+        show(pending)
+        pending.on_change(lambda pending: _on_kernel(show, pending))
+        return box
+
+
+def _on_kernel(function: Any, *args: Any) -> None:
+    """Run a function on the kernel's main thread, as soon as it is idle.
+
+    Updates of a pending view come from background threads, but building
+    widgets may capture displays into output widgets, which relies on hooks
+    of the whole kernel: they are only safe on the main thread. Outside of a
+    kernel, the function runs immediately.
+    """
+    from IPython import get_ipython
+
+    kernel = getattr(get_ipython(), "kernel", None)
+    loop = getattr(kernel, "io_loop", None)
+    if loop is None:
+        function(*args)
+    else:
+        loop.add_callback(function, *args)
 
 
 def wrap(completed: QibocalCompleted) -> Completed:

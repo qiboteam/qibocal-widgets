@@ -57,9 +57,12 @@ Long acquisitions give no feedback. In increasing order of intrusiveness:
 
 ### 5. Background execution
 
-Notebook kernels block during acquisition. A middleware can run the step in a
-thread (`mo.Thread` in Marimo) and return a *pending* execution, displayed as
-such by the frontends and replaced by the result. Remote runners can do the
-same with asynchronous jobs instead of a blocking `srun` (see
-[remote-executor.md](remote-executor.md)). Both need the same pending
-execution type, and the session to record the execution when it completes.
+Done: `Executor.submit` returns a `Pending` execution (a future, with a
+blocking `result()` and `await` support), runs the workflow in a thread, and
+processes executions in submission order; runners declare whether their
+acquisitions may overlap (`Runner.concurrent`). Frontends render pending
+executions (`Frontend.render_pending`): Jupyter replaces the state with the
+result when ready, on the kernel's main thread; Marimo outputs are static, so
+the result is obtained with `await`. Remaining: detached remote jobs
+([#8](https://github.com/qiboteam/qibocal-widgets/issues/8)), cancellation of
+pending executions.
