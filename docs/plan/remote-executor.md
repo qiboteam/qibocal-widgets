@@ -86,8 +86,9 @@ Aligned with Qibocamp:
 
 Fields: `ssh`, `queue`, `slurm`, `workdir`, `venv`, `requirements`,
 `rebuild_on_compute` (same meaning as Qibocamp's notebook connections),
-plus `python` (interpreter or uv version for the environment), `platform`, and
-`timeout`. `QIBOCAL_WIDGETS_CONNECTION` selects a named connection for
+plus `python` (interpreter or uv version for the environment), `platform`,
+`platforms_dir` (`QIBOLAB_PLATFORMS` on the remote machine, named as in
+Qibocamp's agent configurations), and `timeout`. `QIBOCAL_WIDGETS_CONNECTION` selects a named connection for
 `Remote()`, so notebooks need no change across tiers.
 
 ### Environments

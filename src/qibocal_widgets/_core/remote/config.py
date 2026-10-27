@@ -85,6 +85,12 @@ class Connection(BaseModel):
     """Install the environment on a compute node, rather than the access node."""
     platform: str | None = Field(default=None, min_length=1)
     """Platform name, resolved on the remote machine."""
+    platforms_dir: str | None = Field(default=None, min_length=1)
+    """Folder of the platforms on the remote machine (``QIBOLAB_PLATFORMS``).
+
+    It replaces the variable of the remote environment, if any; ``~`` is
+    expanded remotely. The same field as Qibocamp's agent configurations.
+    """
     timeout: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     """Maximum duration of a remote step, in seconds, queue time included."""
 

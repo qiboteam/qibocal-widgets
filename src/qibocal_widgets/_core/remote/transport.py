@@ -146,6 +146,8 @@ def run(connection: Connection, job: dict, *, compute: bool) -> dict:
         RemoteError: if the worker reports a failure, or produces no outcome.
     """
     job = {"venv": connection.venv, **job}
+    if connection.platforms_dir is not None:
+        job.setdefault("platforms_dir", connection.platforms_dir)
     try:
         process = subprocess.run(
             command(connection, compute=compute, action=job["action"]),

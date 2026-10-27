@@ -558,3 +558,27 @@ def test_platform_state_remote(cluster, tmp_path, mock_frequency):
     # edits travel with the next acquisition
     bound = fake(npoints=3)
     assert executor.acquire(bound).data.scale == {0: 4.321e9, 1: mock_frequency[1]}
+
+
+def test_platforms_dir(cluster, monkeypatch, mock_frequency):
+    """The platforms folder comes from the connection, not the environment."""
+    monkeypatch.delenv("QIBOLAB_PLATFORMS")
+    without = Executor(
+        None, targets=TARGETS, runner=Remote(queue="chip", platform="mock")
+    )
+    with pytest.raises(RemoteError):
+        without.acquire(fake(npoints=3))
+
+    save_connection(
+        "lab",
+        Connection(
+            queue="chip",
+            platform="mock",
+            platforms_dir=str(PLATFORMS),
+            venv="qibocal",  # the environment prepared by the fixture
+        ),
+    )
+    assert load_connection("lab").platforms_dir == str(PLATFORMS)
+    executor = Executor(None, targets=TARGETS, runner=Remote("lab"))
+    completed = executor.acquire(fake(npoints=3))
+    assert completed.data.scale == mock_frequency

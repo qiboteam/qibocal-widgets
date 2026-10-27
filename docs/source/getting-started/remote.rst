@@ -69,6 +69,7 @@ Connection options can be given directly, or stored by name:
             queue="qpu",  # SLURM partition
             slurm="--time=30",  # further srun options
             platform="chip",  # resolved on the remote machine
+            platforms_dir="~/platforms",  # where, on the remote machine
             requirements="qibocal @ git+https://github.com/qiboteam/qibocal.git@protodev",
         ),
     )
@@ -86,9 +87,20 @@ shared with Qibocamp (``$QIBOCAMP_CONFIG_DIR``, else
     {
       "version": 1,
       "connections": {
-        "lab": {"ssh": "-J bastion me@login", "queue": "qpu", "platform": "chip"}
+        "lab": {
+          "ssh": "-J bastion me@login",
+          "queue": "qpu",
+          "platform": "chip",
+          "platforms_dir": "~/platforms"
+        }
       }
     }
+
+The platforms are found in ``platforms_dir`` on the remote machine, which
+replaces its ``QIBOLAB_PLATFORMS`` for every remote step (``~`` is expanded
+there). Without it, the remote environment must set the variable itself. The
+field has the name and meaning of the same setting in Qibocamp's agent
+configurations.
 
 The fields mirror the notebook connections of Qibocamp, so that its
 launcher can manage them as well. SSH host aliases and jump hosts from

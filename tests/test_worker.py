@@ -161,3 +161,17 @@ def test_jsonable():
     }
     with pytest.raises(TypeError):
         worker.parameters_document({"a": object()})
+
+
+def test_main_platforms_dir(monkeypatch, capsys):
+    monkeypatch.setenv("HOME", str(PLATFORMS.parent))
+    monkeypatch.delenv("QIBOLAB_PLATFORMS")
+    code, outcome = run_main(
+        monkeypatch,
+        capsys,
+        {"action": "describe", "platform": "mock", "platforms_dir": "~/platforms"},
+    )
+    assert code == 0 and outcome["ok"]
+    import os
+
+    assert os.environ["QIBOLAB_PLATFORMS"] == str(PLATFORMS)

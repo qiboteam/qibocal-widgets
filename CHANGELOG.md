@@ -12,6 +12,9 @@ First development version, targeting the executor interface of Qibocal's
 
 ### Added
 
+- `platforms_dir` in remote connections: the platforms folder on the remote
+  machine, replacing its `QIBOLAB_PLATFORMS`, so that a stored connection
+  needs no environment variable there.
 - A named remote connection has an environment of its own by default,
   `_remote/<name>`, as Qibocamp's desktop application resolves it.
 - `Executor`, a drop-in replacement of `qibocal.Executor`, composed of a

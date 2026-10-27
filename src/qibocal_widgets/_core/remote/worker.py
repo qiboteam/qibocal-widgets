@@ -31,6 +31,8 @@ from pathlib import Path
 
 MARKER = "QIBOCAL_WIDGETS_RESULT "
 """Prefix of the line carrying the outcome on the standard output."""
+PLATFORMS = "QIBOLAB_PLATFORMS"
+"""Environment variable locating qibolab platforms."""
 GUARD = "QIBOCAL_WIDGETS_WORKER"
 """Environment variable set when running inside the configured environment."""
 REQUIREMENTS = "qibocamp-requirements.txt"
@@ -314,6 +316,9 @@ def main() -> int:
     text = sys.stdin.read()
     job = json.loads(text)
     action = job["action"]
+    if job.get("platforms_dir"):
+        # inherited by the environment's interpreter, and the platforms it loads
+        os.environ[PLATFORMS] = str(Path(job["platforms_dir"]).expanduser())
     try:
         if action == "install":
             emit({"ok": True, **install(job)})

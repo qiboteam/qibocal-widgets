@@ -30,7 +30,8 @@ def _():
     platform is created locally, and no instrument access is needed.
 
     The machine running the acquisitions needs Qibocal (installed below) and
-    the platform, found through its own `QIBOLAB_PLATFORMS`.
+    the platform, found in the `platforms_dir` of the connection (or through
+    its own `QIBOLAB_PLATFORMS`, if not given).
     """)
     return
 
@@ -63,6 +64,7 @@ def _():
                 queue="qpu",  # SLURM partition with the instruments
                 slurm="--time=10",  # further srun options
                 platform="qutrits",  # platform name, on the remote machine
+                platforms_dir="~/platforms",  # its folder, on the remote machine
                 requirements=(
                     "qibocal @ git+https://github.com/qiboteam/qibocal.git@protodev"
                 ),
