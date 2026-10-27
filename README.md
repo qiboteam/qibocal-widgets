@@ -148,6 +148,10 @@ uv run ruff check . && uv run ruff format --check .
 uv run --with poethepoet poe docs  # HTML in docs/build/html
 ```
 
+[devenv](https://devenv.sh/) users can run `devenv shell` instead: it installs
+Python, all the extras and development groups, `poe`, `prek` and Jupyter, and
+sets `QIBOLAB_PLATFORMS` to the example platforms.
+
 Continuous integration reuses the
 [qiboteam/workflows](https://github.com/qiboteam/workflows) reusable
 workflows, like Qibocal itself.

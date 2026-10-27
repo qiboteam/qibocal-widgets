@@ -46,3 +46,8 @@ Development
     uv sync --all-extras --group tests --group analysis --group docs
     uv run pytest
     uv run --with poethepoet poe docs
+
+`devenv <https://devenv.sh/>`_ users can run ``devenv shell`` instead: it
+installs Python, all the extras and development groups (the example
+simulator included), ``poe``, ``prek`` and Jupyter, and sets
+``QIBOLAB_PLATFORMS`` to the example platforms.

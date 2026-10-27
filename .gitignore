@@ -156,3 +156,9 @@ docs/source/_extra/
 
 # outputs of the example notebooks
 examples/*/var/
+
+# devenv
+.devenv/
+.devenv.flake.nix
+.direnv/
+devenv.local.nix
