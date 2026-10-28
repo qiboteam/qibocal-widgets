@@ -281,16 +281,21 @@ class Session:
             (Path(completed.path) / KEYFILE).write_text(json.dumps({"key": key}))
 
     def find(self, key: str) -> Path | None:
-        """The folder of the execution recorded with a reuse key, if any."""
+        """The folder of the latest execution recorded with a reuse key, if any.
+
+        The latest is the last iteration of the task (``<id>-<n>``), e.g. after
+        running it again.
+        """
         if not self.started:
             return None
-        for file in sorted((self.path / DATA).glob(f"*/{KEYFILE}")):
+        found = []
+        for file in (self.path / DATA).glob(f"*/{KEYFILE}"):
             try:
                 if json.loads(file.read_text()).get("key") == key:
-                    return file.parent
+                    found.append(file.parent)
             except (OSError, ValueError):
                 continue
-        return None
+        return max(found, key=_iteration, default=None)
 
     def results(self, completed: Completed) -> None:
         """Write the fit results of a recorded execution."""
@@ -322,6 +327,16 @@ class Session:
     def _dump(self) -> None:
         (self.path / HISTORY).write_text(json.dumps(self.order, indent=4))
         (self.path / META).write_text(json.dumps(self.meta.dump(), indent=4))
+
+
+def _iteration(folder: Path) -> tuple[int, float]:
+    """Order of the recorded executions of a task: iteration, then time."""
+    _, _, iteration = folder.name.rpartition("-")
+    try:
+        number = int(iteration)
+    except ValueError:
+        number = -1
+    return number, folder.stat().st_mtime
 
 
 def _qualname(protocol) -> str:

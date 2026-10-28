@@ -314,3 +314,19 @@ def test_foreign_notes_carried(tmp_path, ramsey):
     assert history(second.path) == ["ramsey_signal-0"]
     assert [n.content for n in second.session.notes(recorded)] == ["noisy"]
     assert isinstance(loaded.notes[0], Note)
+
+
+def test_find_latest(tmp_path):
+    """The latest iteration of a task, in numeric order (``-10`` after ``-2``)."""
+    session = Session(tmp_path / "s")
+    data = tmp_path / "s" / "data"
+    for n in (0, 2, 10, 3):
+        folder = data / f"ramsey-{n}"
+        folder.mkdir(parents=True)
+        (folder / "qibocal-widgets.json").write_text(json.dumps({"key": "k"}))
+    (data / "other-0").mkdir()
+    (data / "other-0" / "qibocal-widgets.json").write_text(json.dumps({"key": "x"}))
+    session.started = True
+    assert session.find("k") == data / "ramsey-10"
+    assert session.find("x") == data / "other-0"
+    assert session.find("missing") is None
