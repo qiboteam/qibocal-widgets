@@ -46,3 +46,27 @@ def test_reactive_pending(tmp_path):
     assert "DOWNSTREAM-WAITING" not in outputs
     # the spinner of the submitting cell was replaced by the result
     assert "Raw data: 0" in page
+
+
+def test_rerun_follows(tmp_path):
+    """The spinner of a cell run again is replaced, not only the first one."""
+    output = tmp_path / "rerun.html"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "marimo",
+            "export",
+            "html",
+            str(NOTEBOOK.parent / "rerun.py"),
+            "-o",
+            str(output),
+            "-f",
+        ],
+        check=True,
+        capture_output=True,
+        timeout=120,
+    )
+    page = output.read_text()
+    assert "Raw data: 0" in page
+    assert "marimo-progress" not in page  # no spinner left

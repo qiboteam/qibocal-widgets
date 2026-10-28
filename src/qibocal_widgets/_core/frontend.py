@@ -56,6 +56,14 @@ class Frontend:
         """
         return None
 
+    def submitted(self, pending: Pending) -> None:
+        """Called with every execution returned by ``Executor.submit``.
+
+        In the context of the call, e.g. the notebook cell: the execution may
+        be new, or reused, possibly already completed. Frontends following the
+        executions where they are displayed override it.
+        """
+
     def render_pending(self, pending: Pending) -> Any:
         """Displayable object for an execution running in the background.
 

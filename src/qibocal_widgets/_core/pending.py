@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import html
 import threading
 from collections.abc import Callable, Generator
@@ -100,10 +101,20 @@ class Pending:
             return found.rpartition(":")[2]
         return getattr(self.bound.protocol.acquisition, "__module__", "protocol")
 
-    def on_change(self, callback: Callable[[Pending], None]) -> None:
-        """Call ``callback(pending)`` on every change of state, from any thread."""
+    def on_change(self, callback: Callable[[Pending], None]) -> Callable[[], None]:
+        """Call ``callback(pending)`` on every change of state, from any thread.
+
+        Changes of state include new estimates. Returns a function removing the
+        callback.
+        """
         with self._lock:
             self._callbacks.append(callback)
+
+        def remove() -> None:
+            with self._lock, contextlib.suppress(ValueError):
+                self._callbacks.remove(callback)
+
+        return remove
 
     def _set(self, status: str) -> None:
         self._status = status

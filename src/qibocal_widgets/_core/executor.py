@@ -327,14 +327,14 @@ class Executor(QibocalExecutor):
             with self._order:
                 running = self._running.get(key)
             if running is not None:
-                return running
+                return self._submitted_to_frontends(running)
             # only registered protocols can be loaded back from disk
             recorded = self.session is not None and registered_name(bound.protocol)
             folder = self.session.find(key) if recorded else None
             if folder is not None:
                 pending = self._pending(pending_type, bound)
                 pending._resolve(self._reload(folder))
-                return pending
+                return self._submitted_to_frontends(pending)
 
         pending = self._pending(pending_type, bound)
         with self._order:
@@ -349,6 +349,11 @@ class Executor(QibocalExecutor):
             daemon=True,
         )
         thread.start()
+        return self._submitted_to_frontends(pending)
+
+    def _submitted_to_frontends(self, pending: Pending) -> Pending:
+        for frontend in self.frontends:
+            frontend.submitted(pending)
         return pending
 
     def _pending(self, pending_type: type[Pending], bound: BoundProtocol) -> Pending:

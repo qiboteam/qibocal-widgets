@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any
 
 import marimo as mo
@@ -117,6 +118,26 @@ class Marimo(Frontend):
             return None
         return MarimoPending, mo.Thread
 
+    def submitted(self, pending: Pending) -> None:
+        """Follow the execution in the cell run submitting it, new or reused.
+
+        A ``mo.Thread`` of the current run replaces the displayed spinner with
+        the progress, then the result. It stops when the cell runs again: the
+        new run follows the execution itself, if it submits it again (e.g.
+        reused).
+        """
+        if not isinstance(pending, MarimoPending) or pending.status in ENDED:
+            return
+        cell, run = _run()
+        if cell is None:
+            return
+        mo.Thread(
+            target=_follow,
+            args=(pending, cell, run),
+            name=f"qibocal-widgets-follow-{pending.name}",
+            daemon=True,
+        ).start()
+
     def render_pending(self, pending: Pending) -> Any:
         """A spinner while running, then the result (or the error).
 
@@ -127,10 +148,12 @@ class Marimo(Frontend):
         replaced by the result when the execution completes (unless other
         pending executions are displayed in the same cell).
         """
-        if isinstance(pending, MarimoPending):
-            cell = _cell_id()
-            pending._rendered_in = cell
-            _RENDERED.setdefault(cell, set()).add(id(pending))
+        cell, run = _run()
+        if cell is not None:
+            shown = _RENDERED.get(cell)
+            if shown is None or shown[0] is not run:
+                shown = _RENDERED[cell] = (run, set(), time.monotonic())
+            shown[1].add(id(pending))
         if pending.status == DONE:
             return display(pending.result())
         if pending.status == FAILED:
@@ -141,18 +164,76 @@ class Marimo(Frontend):
         return mo.status.spinner(title=pending.name, subtitle=pending.describe())
 
 
-_RENDERED: dict[str | None, set[int]] = {}
-"""Pending executions rendered in each cell (by identity)."""
+_RENDERED: dict[str, tuple[object, set[int], float]] = {}
+"""Pending executions displayed by each cell, in its latest run (by identity),
+and when the run first displayed one."""
+
+ENDED = (DONE, FAILED)
+"""States of a completed execution."""
+POLL = 1.0
+"""Seconds between checks of a followed execution, besides its changes."""
+LINGER = 5.0
+"""Seconds to keep following a completed execution, until it is displayed."""
+GRACE = 0.25
+"""Seconds between a cell displaying an execution and replacing its output.
+
+Marimo formats the output of a cell, where the execution registers as
+displayed, before sending it: a replacement in between would be overwritten.
+"""
 
 
-def _cell_id() -> str | None:
-    """The cell being executed, if any."""
+def _run() -> tuple[str | None, object]:
+    """The cell being executed, if any, and a token of its current run.
+
+    The token is the output list of the run, shared with the threads it
+    spawns, and new for every run.
+    """
     try:
         from marimo._runtime.context import get_context
 
-        return get_context().execution_context.cell_id
+        context = get_context().execution_context
+        return context.cell_id, context.output
     except Exception:  # noqa: BLE001 - outside of a cell, or a script
-        return None
+        return None, None
+
+
+def _follow(pending: Pending, cell: str, run: object) -> None:
+    """Show the changes of an execution in the output of a cell run.
+
+    Only while the run is the latest of the cell, and displays this execution
+    alone; the display already shows the state at the time it was rendered.
+    """
+    thread = mo.current_thread()
+    changed = threading.Event()
+    remove = pending.on_change(lambda _: changed.set())
+    shown = None
+    lingering = None
+    try:
+        while not getattr(thread, "should_exit", False):
+            changed.wait(POLL)
+            changed.clear()
+            displayed = _RENDERED.get(cell)
+            alone = (
+                displayed is not None
+                and displayed[0] is run
+                and displayed[1] == {id(pending)}
+            )
+            if alone and (wait := displayed[2] + GRACE - time.monotonic()) > 0:
+                time.sleep(wait)  # until the displayed output has been sent
+            state = (pending.status, len(pending.estimates))
+            if alone and state != shown:
+                mo.output.replace(pending._display_())
+                shown = state
+            # the status, not `done()`: it changes last, once the result is set
+            if state[0] in ENDED:
+                if shown == state:
+                    return
+                # completed before being displayed: the display may follow
+                lingering = lingering or time.monotonic()
+                if time.monotonic() - lingering > LINGER:
+                    return
+    finally:
+        remove()
 
 
 class MarimoPending(Pending, State):
@@ -174,35 +255,13 @@ class MarimoPending(Pending, State):
     def __init__(self, bound):
         Pending.__init__(self, bound)
         State.__init__(self, None)
-        self._submitted_in = _cell_id()
-        self._rendered_in: str | None = None
 
     def __call__(self):
         return Pending.__call__(self)
 
-    def _owns_output(self) -> bool:
-        """Whether the submitting cell displays this execution, and no other one."""
-        stale = getattr(mo.current_thread(), "should_exit", False)
-        alone = _RENDERED.get(self._rendered_in, set()) == {id(self)}
-        return (
-            not stale
-            and alone
-            and self._submitted_in is not None
-            and self._rendered_in == self._submitted_in
-        )
-
-    def _estimated(self) -> None:
-        if self._owns_output():
-            # the spinner, or the previous estimate, becomes the progress bar
-            mo.output.replace(self._display_())
-
     def _completed(self) -> None:
-        if self._owns_output():
-            # show the result in place of the spinner
-            mo.output.replace(
-                display(self.result()) if self.status == DONE else self._display_()
-            )
-        # rerun the cells referencing this execution
+        # rerun the cells referencing this execution; the displayed spinners
+        # are replaced by the cell runs following it (see `Marimo.submitted`)
         self._set_value(self.status)
 
 

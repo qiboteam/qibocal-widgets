@@ -77,7 +77,8 @@ result when ready, on the kernel's main thread. In Marimo
 (`Frontend.background`), executions run in `mo.Thread` and pending executions
 are `mo.state` getters (a `State` subclass): cells referencing them run again
 on completion, `pending()` peeks without blocking, and a spinner displayed by
-the submitting cell is replaced by the result; nothing blocks, so explorers and
+the submitting cell is replaced by the result (followed by each cell run
+submitting it, new or reused, so that runs again keep updating); nothing blocks, so explorers and
 monitors stay interactive. `reuse=True` avoids repeated acquisitions through the
 session records (a key file per task), instead of caching data with
 `mo.cache`. Remaining: detached remote jobs
