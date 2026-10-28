@@ -624,3 +624,4 @@ def test_estimates_streamed(cluster, monkeypatch):
     pending = executor.submit(estimated(pars=FakeParameters(npoints=3)))
     pending.result(60)
     assert [e.seconds for e in pending.estimates] == list(ESTIMATES)
+    assert [e.kind for e in pending.estimates] == ["execution", "batch"]

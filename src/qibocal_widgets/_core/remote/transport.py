@@ -192,8 +192,10 @@ def run(connection: Connection, job: dict, *, compute: bool) -> dict:
                 outcome = json.loads(line[len(worker.MARKER) :])
             elif line.startswith(worker.PROGRESS):
                 with contextlib.suppress(ValueError, KeyError, TypeError):
+                    estimate = json.loads(line[len(worker.PROGRESS) :])
                     progress.report(
-                        float(json.loads(line[len(worker.PROGRESS) :])["estimate"])
+                        float(estimate["estimate"]),
+                        str(estimate.get("kind", "execution")),
                     )
         process.wait()
     finally:

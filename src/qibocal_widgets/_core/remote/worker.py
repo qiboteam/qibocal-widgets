@@ -36,11 +36,12 @@ MARKER = "QIBOCAL_WIDGETS_RESULT "
 """Prefix of the line carrying the outcome on the standard output."""
 PROGRESS = "QIBOCAL_WIDGETS_PROGRESS "
 """Prefix of the lines carrying duration estimates, while acquiring."""
-ESTIMATE_LOGGERS = (
-    "qibolab._core.platform.platform",
-    "qibolab._core.instruments.qblox.cluster",
-)
-"""Loggers of the duration estimates: qibolab's, then the driver's refinement."""
+ESTIMATE_LOGGERS = {
+    "qibolab._core.platform.platform": "execution",
+    "qibolab._core.instruments.qblox.cluster": "batch",
+}
+"""Loggers of the duration estimates, and their kind: qibolab's, for a whole
+execution on the platform, then the driver's refinement, before each batch."""
 ESTIMATE = re.compile(
     r"(?:Pulse execution time|expected execution time): ([-+.\deE]+) s"
 )
@@ -72,13 +73,14 @@ def _scrape(record: logging.LogRecord) -> bool:
         match = ESTIMATE.search(record.getMessage())
         if match is not None:
             with contextlib.suppress(Exception):
-                callback(float(match[1]))
+                callback(float(match[1]), ESTIMATE_LOGGERS[record.name])
     return record.levelno >= _estimates_levels.get(record.name, (0, 0))[1]
 
 
 @contextlib.contextmanager
 def estimates(callback):
-    """Call ``callback(seconds)`` with the duration estimates logged by qibolab.
+    """Call ``callback(seconds, kind)`` with the duration estimates logged by
+    qibolab, of a whole execution, or of a batch (see :data:`ESTIMATE_LOGGERS`).
 
     Only the estimates logged by the current thread are captured. Their
     loggers are enabled for them, if needed, without emitting anything more
@@ -106,9 +108,9 @@ def estimates(callback):
                     logger.setLevel(_estimates_levels.pop(name)[0])
 
 
-def emit_estimate(seconds: float) -> None:
+def emit_estimate(seconds: float, kind: str) -> None:
     """Write a duration estimate line."""
-    sys.stdout.write(PROGRESS + json.dumps({"estimate": seconds}) + "\n")
+    sys.stdout.write(PROGRESS + json.dumps({"estimate": seconds, "kind": kind}) + "\n")
     sys.stdout.flush()
 
 

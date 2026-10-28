@@ -37,6 +37,9 @@ class Estimate:
     """Estimated duration."""
     at: datetime
     """When it was received (UTC): the acquisition starts after it."""
+    kind: str = "execution"
+    """``execution``, for a whole execution on the platform (from qibolab), or
+    ``batch``, for one of its batches (refined by the driver, e.g. Qblox)."""
 
 
 PROGRESS_STYLE = (
@@ -112,9 +115,9 @@ class Pending:
         for callback in callbacks:
             callback(self)
 
-    def _estimate(self, seconds: float) -> None:
+    def _estimate(self, seconds: float, kind: str = "execution") -> None:
         """Record a duration estimate (from the acquiring thread)."""
-        self.estimates.append(Estimate(seconds, datetime.now(UTC)))
+        self.estimates.append(Estimate(seconds, datetime.now(UTC), kind))
         self._notify()
         self._estimated()
 
@@ -174,12 +177,24 @@ class Pending:
             return f"{self.name}: failed, {self.future.exception()!r}"
         return f"{self.name}: {self._status}, submitted at {self.submitted_at:%H:%M:%S} UTC"
 
+    @property
+    def batches(self) -> int:
+        """Batches started in the current execution on the platform, as
+        estimated by the driver: all but the last are done."""
+        count = 0
+        for estimate in reversed(self.estimates):
+            if estimate.kind != "batch":
+                break
+            count += 1
+        return count
+
     def progress(self) -> str | None:
         """A progress bar, as HTML, while acquiring with an estimate.
 
         It fills in the latest estimated duration, from when the estimate was
         received, with a CSS animation: no further update is needed. The
-        first estimate is shown for comparison.
+        first estimate is shown for comparison, and the batches done, once
+        the driver estimates them (their total is not known in advance).
         """
         if self._status != ACQUIRING or not self.estimates:
             return None
@@ -192,6 +207,8 @@ class Pending:
                 f" (estimate {len(self.estimates)}, first {_duration(first.seconds)})"
             )
         text += f", from {latest.at:%H:%M:%S} UTC"
+        if self.batches:
+            text += f"; batches done: {self.batches - 1}/?"
         animation = (
             f"qibocal-widgets-progress {seconds:.3f}s linear {-elapsed:.3f}s forwards"
         )

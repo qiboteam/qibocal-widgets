@@ -193,8 +193,10 @@ accounting for its overheads). The estimates are captured where the
 acquisition runs, locally or by the remote worker, which streams them back
 while the job runs: the displayed spinner becomes a progress bar, filling in
 the estimated time. Each new estimate starts the bar again, since the
-acquisition starts after it, showing the first one for comparison. The
-estimates received are in ``pending.estimates``. Capturing them changes
+acquisition starts after it, showing the first one for comparison. Drivers
+estimating each batch (Qblox) also count them: ``batches done: 2/?``, the total
+being unknown in advance; the count starts again with each execution on the
+platform. The estimates received are in ``pending.estimates``. Capturing them changes
 nothing in the logs: they are only emitted where they already were.
 
 **Avoiding repeated acquisitions.** Notebooks run cells again, unintentionally

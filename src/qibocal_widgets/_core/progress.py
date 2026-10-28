@@ -20,7 +20,7 @@ _current = threading.local()
 
 
 @contextmanager
-def reporting(callback: Callable[[float], None]) -> Iterator[None]:
+def reporting(callback: Callable[[float, str], None]) -> Iterator[None]:
     """Pass the estimates of the acquisitions in the current thread to ``callback``.
 
     Both the estimates logged in this thread, and those reported with
@@ -35,8 +35,9 @@ def reporting(callback: Callable[[float], None]) -> Iterator[None]:
         _current.callback = previous
 
 
-def report(seconds: float) -> None:
-    """Report an estimate, to the callback of the current thread, if any."""
+def report(seconds: float, kind: str = "execution") -> None:
+    """Report an estimate, of an ``execution`` or a ``batch``, to the callback
+    of the current thread, if any."""
     callback = getattr(_current, "callback", None)
     if callback is not None:
-        callback(seconds)
+        callback(seconds, kind)

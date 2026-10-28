@@ -368,8 +368,10 @@ def test_estimates_captured():
     pending = executor.submit(estimated(pars=FakeParameters(npoints=3)))
     wait_for(lambda: len(pending.estimates) == 2)
     assert [e.seconds for e in pending.estimates] == list(ESTIMATES)
+    assert [e.kind for e in pending.estimates] == ["execution", "batch"]
     bar = pending.progress()
     assert "estimated 2.5 s (estimate 2, first 2 s)" in bar
+    assert "batches done: 0/?" in bar
     assert "animation: qibocal-widgets-progress 2.500s linear" in bar
     gate.set()
     pending.result(10)
@@ -385,8 +387,8 @@ def test_estimates_hidden_unless_enabled(caplog):
 
     caplog.set_level(logging.WARNING)
     seen = []
-    logger = logging.getLogger(worker.ESTIMATE_LOGGERS[0])
-    with worker.estimates(seen.append):
+    logger = logging.getLogger(next(iter(worker.ESTIMATE_LOGGERS)))
+    with worker.estimates(lambda seconds, kind: seen.append((seconds, kind))):
         logger.info("Pulse execution time: 1.500 s")
         logger.info("unrelated")
         other = threading.Thread(
@@ -394,13 +396,13 @@ def test_estimates_hidden_unless_enabled(caplog):
         )
         other.start()
         other.join()
-    assert seen == [1.5]  # only from the capturing thread
+    assert seen == [(1.5, "execution")]  # only from the capturing thread
     assert not caplog.records
 
     caplog.set_level(logging.INFO)
-    with worker.estimates(seen.append):
+    with worker.estimates(lambda seconds, kind: seen.append((seconds, kind))):
         logger.info("Pulse execution time: 3 s")
-    assert seen == [1.5, 3.0]
+    assert seen == [(1.5, "execution"), (3.0, "execution")]
     assert [r.getMessage() for r in caplog.records] == ["Pulse execution time: 3 s"]
 
 
@@ -428,3 +430,23 @@ def test_estimate_views(bound):
     runner.gate(bound.parameters.npoints).set()
     pending.result(10)
     wait_for(lambda: isinstance(box.children[0], widgets.Tab))
+
+
+def test_batches(bound):
+    runner = Gated()
+    executor = Executor(None, targets=TARGETS, update=False, runner=runner)
+    pending = executor.submit(bound)
+    wait_for(lambda: pending.status == "acquiring")
+    pending._estimate(10.0)
+    assert pending.batches == 0
+    assert "batches" not in pending.progress()  # no driver estimate
+    for seconds in (4.0, 4.0, 3.0):
+        pending._estimate(seconds, "batch")
+    assert pending.batches == 3
+    assert "batches done: 2/?" in pending.progress()
+    pending._estimate(10.0)  # the next execution on the platform
+    assert pending.batches == 0
+    pending._estimate(5.0, "batch")
+    assert "batches done: 0/?" in pending.progress()
+    runner.gate(bound.parameters.npoints).set()
+    pending.result(10)

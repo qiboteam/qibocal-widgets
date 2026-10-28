@@ -60,7 +60,9 @@ Remaining, in increasing order of intrusiveness:
   executions, which only the protocol knows;
 - the log messages are scraped, and their loggers named: a structured hook in
   qibolab (e.g. an estimate callback in the execution parameters) would be
-  sturdier;
+  sturdier, and give the total number of batches, now shown as
+  `batches done: n/?`
+  ([#11](https://github.com/qiboteam/qibocal-widgets/issues/11));
 - a progress callback in Qibocal's executor (upstream);
 - partial data for protocols acquiring in batches.
 
