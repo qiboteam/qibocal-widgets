@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import threading
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -14,7 +16,7 @@ from qibocal.auto.operation import BoundProtocol
 from .completed import MARIMO, MIMEBUNDLE, Completed, View
 from .protocols import reference
 
-__all__ = ["Pending"]
+__all__ = ["Estimate", "Pending"]
 
 WAITING = "waiting"
 """Waiting for the instruments, busy with an earlier acquisition."""
@@ -25,6 +27,22 @@ PROCESSING = "processing"
 DONE = "done"
 FAILED = "failed"
 STATES = (WAITING, ACQUIRING, PROCESSING, DONE, FAILED)
+
+
+@dataclass(frozen=True)
+class Estimate:
+    """An estimate of the acquisition duration, logged by qibolab or its driver."""
+
+    seconds: float
+    """Estimated duration."""
+    at: datetime
+    """When it was received (UTC): the acquisition starts after it."""
+
+
+PROGRESS_STYLE = (
+    "<style>@keyframes qibocal-widgets-progress"
+    " { from { width: 0 } to { width: 100% } }</style>"
+)
 
 
 class Pending:
@@ -57,6 +75,9 @@ class Pending:
         """When the execution was submitted (UTC)."""
         self.views: dict[str, View] = {}
         """Views registered by frontends, keyed by display protocol."""
+        self.estimates: list[Estimate] = []
+        """Duration estimates received while acquiring, in order: each one
+        refines the previous ones, and restarts the progress bar."""
         self._status = WAITING
         self._callbacks: list[Callable[[Pending], None]] = []
         self._lock = threading.Lock()
@@ -83,10 +104,22 @@ class Pending:
 
     def _set(self, status: str) -> None:
         self._status = status
+        self._notify()
+
+    def _notify(self) -> None:
         with self._lock:
             callbacks = list(self._callbacks)
         for callback in callbacks:
             callback(self)
+
+    def _estimate(self, seconds: float) -> None:
+        """Record a duration estimate (from the acquiring thread)."""
+        self.estimates.append(Estimate(seconds, datetime.now(UTC)))
+        self._notify()
+        self._estimated()
+
+    def _estimated(self) -> None:
+        """Hook run, in the background thread, on every new estimate."""
 
     def _resolve(self, completed: Completed) -> None:
         self.future.set_result(completed)
@@ -141,6 +174,36 @@ class Pending:
             return f"{self.name}: failed, {self.future.exception()!r}"
         return f"{self.name}: {self._status}, submitted at {self.submitted_at:%H:%M:%S} UTC"
 
+    def progress(self) -> str | None:
+        """A progress bar, as HTML, while acquiring with an estimate.
+
+        It fills in the latest estimated duration, from when the estimate was
+        received, with a CSS animation: no further update is needed. The
+        first estimate is shown for comparison.
+        """
+        if self._status != ACQUIRING or not self.estimates:
+            return None
+        first, latest = self.estimates[0], self.estimates[-1]
+        elapsed = (datetime.now(UTC) - latest.at).total_seconds()
+        seconds = max(latest.seconds, 1e-3)
+        text = f"estimated {_duration(latest.seconds)}"
+        if len(self.estimates) > 1:
+            text += (
+                f" (estimate {len(self.estimates)}, first {_duration(first.seconds)})"
+            )
+        text += f", from {latest.at:%H:%M:%S} UTC"
+        animation = (
+            f"qibocal-widgets-progress {seconds:.3f}s linear {-elapsed:.3f}s forwards"
+        )
+        return (
+            f"{PROGRESS_STYLE}<div style='min-width: 16em; max-width: 40em'>"
+            f"<div><b>{html.escape(self.name)}</b>: acquiring, {text}</div>"
+            "<div style='height: 0.5em; margin-top: 0.3em; border-radius: 0.25em;"
+            " background: rgba(127, 127, 127, 0.25); overflow: hidden'>"
+            "<div style='height: 100%; width: 0; background: #3b82f6;"
+            f" animation: {animation}'></div></div></div>"
+        )
+
     def _display_(self) -> Any:
         """Marimo display protocol."""
         view = self.views.get(MARIMO)
@@ -155,3 +218,14 @@ class Pending:
 
     def __repr__(self) -> str:
         return f"<Pending {self.describe()}>"
+
+
+def _duration(seconds: float) -> str:
+    """A duration, for display."""
+    if seconds < 60:
+        return f"{seconds:.3g} s"
+    minutes, seconds = divmod(round(seconds), 60)
+    if minutes < 60:
+        return f"{minutes} min {seconds} s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} h {minutes} min"

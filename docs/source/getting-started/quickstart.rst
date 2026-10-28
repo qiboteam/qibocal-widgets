@@ -230,7 +230,9 @@ returns a :class:`~qibocal_widgets.Pending` execution at once: peek at it with
 ``pending()``, wait for it with ``pending.result()``, or ``await pending``. In
 Marimo, it is reactive state: cells referencing it run again when it completes.
 ``reuse=True`` returns an identical execution, running or recorded, instead of
-acquiring again. Executions are processed in submission order; with the
+acquiring again. While acquiring, the display shows a progress bar from the
+duration estimated by qibolab (see :doc:`remote`). Executions are processed in
+submission order; with the
 local runner, acquisitions wait for each other, sharing the instruments, and
 manage the platform connection themselves (no ``with executor:`` needed). It
 matters most for remote execution, where jobs wait in a queue: see

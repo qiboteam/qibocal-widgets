@@ -27,6 +27,7 @@ from qibocal.auto.operation import BoundProtocol
 from qibocal.auto.task import Completed as QibocalCompleted
 from qibocal.auto.task import Targets
 
+from . import progress
 from .completed import Completed, convert
 from .frontend import Frontend
 from .middleware import Middleware
@@ -402,7 +403,7 @@ class Executor(QibocalExecutor):
             lock = nullcontext() if self.runner.concurrent else self._instruments
             with lock:
                 pending._set(ACQUIRING)
-                with self:
+                with self, progress.reporting(pending._estimate):
                     acquired = self._chain("acquire", bound, **kwargs)
         except BaseException as exception:  # noqa: BLE001 - reported to the caller
             error = exception

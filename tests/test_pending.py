@@ -10,6 +10,8 @@ from fake import FakeData, fake
 from qibocal import Executor as QibocalExecutor
 
 from qibocal_widgets import Completed, Executor, Pending, Runner
+from qibocal_widgets._core.remote import worker
+from qibocal_widgets._core.remote.worker import _scrape
 
 
 class Gated(Runner):
@@ -340,3 +342,89 @@ def test_reuse_platform_state(monkeypatch, bound):
     executor.platform_state.update({"configs.0/drive.frequency": 4.2e9})
     executor.submit(bound, reuse=True).result(10)
     assert runner.count == 2  # the platform changed: not identical
+
+
+# -- duration estimates ------------------------------------------------------------
+
+
+def test_estimates_captured():
+    import logging
+
+    from fake import ESTIMATES, FakeParameters, estimated
+
+    loggers = [logging.getLogger(name) for name in worker.ESTIMATE_LOGGERS]
+    levels = [logger.level for logger in loggers]
+    gate = threading.Event()
+
+    class Late(Runner):
+        """Acquire, then wait: still acquiring, once estimated."""
+
+        def acquire(self, executor, bound, **kwargs):
+            completed = QibocalExecutor.acquire(executor, bound, **kwargs)
+            assert gate.wait(10)
+            return completed
+
+    executor = Executor(None, targets=TARGETS, update=False, runner=Late())
+    pending = executor.submit(estimated(pars=FakeParameters(npoints=3)))
+    wait_for(lambda: len(pending.estimates) == 2)
+    assert [e.seconds for e in pending.estimates] == list(ESTIMATES)
+    bar = pending.progress()
+    assert "estimated 2.5 s (estimate 2, first 2 s)" in bar
+    assert "animation: qibocal-widgets-progress 2.500s linear" in bar
+    gate.set()
+    pending.result(10)
+    assert pending.progress() is None  # only while acquiring
+    # the loggers are left as they were
+    assert [logger.level for logger in loggers] == levels
+    assert all(_scrape not in logger.filters for logger in loggers)
+
+
+def test_estimates_hidden_unless_enabled(caplog):
+    """Loggers enabled for the estimates do not emit more than before."""
+    import logging
+
+    caplog.set_level(logging.WARNING)
+    seen = []
+    logger = logging.getLogger(worker.ESTIMATE_LOGGERS[0])
+    with worker.estimates(seen.append):
+        logger.info("Pulse execution time: 1.500 s")
+        logger.info("unrelated")
+        other = threading.Thread(
+            target=logger.info, args=("Pulse execution time: 9 s",)
+        )
+        other.start()
+        other.join()
+    assert seen == [1.5]  # only from the capturing thread
+    assert not caplog.records
+
+    caplog.set_level(logging.INFO)
+    with worker.estimates(seen.append):
+        logger.info("Pulse execution time: 3 s")
+    assert seen == [1.5, 3.0]
+    assert [r.getMessage() for r in caplog.records] == ["Pulse execution time: 3 s"]
+
+
+def test_estimate_views(bound):
+    pytest.importorskip("marimo")
+    widgets = pytest.importorskip("ipywidgets")
+    from qibocal_widgets.jupyter import Jupyter
+    from qibocal_widgets.marimo import Marimo
+
+    runner = Gated()
+    executor = Executor(
+        None,
+        targets=TARGETS,
+        update=False,
+        runner=runner,
+        frontends=[Marimo(), Jupyter()],
+    )
+    pending = executor.submit(bound)
+    wait_for(lambda: pending.status == "acquiring")
+    box = pending.views["_repr_mimebundle_"](pending)
+    pending._estimate(90.0)
+    wait_for(lambda: "progress" in box.children[0].value)  # updated live
+    assert "estimated 1 min 30 s" in box.children[0].value
+    assert "1 min 30 s" in pending._display_().text
+    runner.gate(bound.parameters.npoints).set()
+    pending.result(10)
+    wait_for(lambda: isinstance(box.children[0], widgets.Tab))

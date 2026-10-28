@@ -152,7 +152,8 @@ class Jupyter(Frontend):
         return display(completed)
 
     def render_pending(self, pending: Pending) -> Any:
-        """A live view: the state, replaced by the result once completed."""
+        """A live view: the state (a progress bar, once estimated), replaced by
+        the result once completed."""
         box = widgets.VBox([])
 
         def show(pending: Pending) -> None:
@@ -160,6 +161,8 @@ class Jupyter(Frontend):
                 box.children = [display(pending.result())]
             elif pending.status == FAILED:
                 box.children = [widgets.HTML(f"<pre>{pending.describe()}</pre>")]
+            elif (bar := pending.progress()) is not None:
+                box.children = [widgets.HTML(bar)]
             else:
                 box.children = [_message(pending.describe())]
 

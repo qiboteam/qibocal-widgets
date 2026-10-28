@@ -39,7 +39,7 @@ from ._core.executor import Executor
 from ._core.frontend import Frontend
 from ._core.middleware import Middleware
 from ._core.output import reports_dir
-from ._core.pending import Pending
+from ._core.pending import Estimate, Pending
 from ._core.reports import Report, reports, reports_of
 from ._core.runner import Local, Runner
 from ._core.session import Session, SessionExists
@@ -48,6 +48,7 @@ from ._core.version import __version__
 
 __all__ = [
     "Completed",
+    "Estimate",
     "Executor",
     "Frontend",
     "Local",

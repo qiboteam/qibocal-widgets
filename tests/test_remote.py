@@ -608,3 +608,19 @@ def test_submit_remote(cluster, tmp_path, monkeypatch, mock_frequency):
     assert [r.path.name for r in results] == ["fake-0", "fake-1", "fake-2"]
     assert all(r.data.scale == mock_frequency for r in results)
     assert [call["tool"] for call in cluster()].count("srun") == 3
+
+
+def test_estimates_streamed(cluster, monkeypatch):
+    """Duration estimates logged remotely reach the pending execution."""
+    from fake import ESTIMATES, FakeParameters, estimated
+
+    monkeypatch.setenv("FAKE_SLEEP", "1")
+    executor = Executor(
+        None,
+        targets=TARGETS,
+        update=False,
+        runner=Remote(queue="chip", platform="mock"),
+    )
+    pending = executor.submit(estimated(pars=FakeParameters(npoints=3)))
+    pending.result(60)
+    assert [e.seconds for e in pending.estimates] == list(ESTIMATES)

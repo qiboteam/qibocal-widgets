@@ -47,12 +47,21 @@ widget), mapped to `mo.ui.run_button` cells in Marimo.
 
 ### 4. Acquisition progress
 
-Long acquisitions give no feedback. In increasing order of intrusiveness:
+Done, for background executions: the estimates logged by qibolab
+(`Platform.execute`) and refined by drivers (Qblox, before each batch) are
+captured by a logger filter, in the acquiring thread or in the remote worker
+(streamed as `QIBOCAL_WIDGETS_PROGRESS` lines), and displayed as a progress bar
+(a CSS animation: no periodic refresh), restarting on each estimate.
 
-- elapsed and estimated time, from the parameters (`nshots`, sweep sizes): a
-  middleware around `acquire`, feasible now;
-- a progress callback in Qibocal's executor (upstream), consumed by the same
-  middleware;
+Remaining, in increasing order of intrusiveness:
+
+- protocols executing the platform several times log one estimate per
+  execution, each restarting the bar: an overall estimate needs the number of
+  executions, which only the protocol knows;
+- the log messages are scraped, and their loggers named: a structured hook in
+  qibolab (e.g. an estimate callback in the execution parameters) would be
+  sturdier;
+- a progress callback in Qibocal's executor (upstream);
 - partial data for protocols acquiring in batches.
 
 ### 5. Background execution

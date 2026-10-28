@@ -120,6 +120,9 @@ class Marimo(Frontend):
     def render_pending(self, pending: Pending) -> Any:
         """A spinner while running, then the result (or the error).
 
+        The spinner becomes a progress bar when the duration of the acquisition
+        is estimated, starting again on each refined estimate.
+
         Displayed as the output of the cell which submitted it, the spinner is
         replaced by the result when the execution completes (unless other
         pending executions are displayed in the same cell).
@@ -132,6 +135,9 @@ class Marimo(Frontend):
             return display(pending.result())
         if pending.status == FAILED:
             return mo.callout(mo.md(f"**{pending.describe()}**"), kind="danger")
+        bar = pending.progress()
+        if bar is not None:
+            return mo.Html(bar)
         return mo.status.spinner(title=pending.name, subtitle=pending.describe())
 
 
@@ -174,18 +180,25 @@ class MarimoPending(Pending, State):
     def __call__(self):
         return Pending.__call__(self)
 
-    def _completed(self) -> None:
-        thread = mo.current_thread()
-        stale = getattr(thread, "should_exit", False)
+    def _owns_output(self) -> bool:
+        """Whether the submitting cell displays this execution, and no other one."""
+        stale = getattr(mo.current_thread(), "should_exit", False)
         alone = _RENDERED.get(self._rendered_in, set()) == {id(self)}
-        if (
+        return (
             not stale
             and alone
             and self._submitted_in is not None
             and self._rendered_in == self._submitted_in
-        ):
-            # the submitting cell displayed its spinner, and no other one:
-            # show the result there
+        )
+
+    def _estimated(self) -> None:
+        if self._owns_output():
+            # the spinner, or the previous estimate, becomes the progress bar
+            mo.output.replace(self._display_())
+
+    def _completed(self) -> None:
+        if self._owns_output():
+            # show the result in place of the spinner
             mo.output.replace(
                 display(self.result()) if self.status == DONE else self._display_()
             )

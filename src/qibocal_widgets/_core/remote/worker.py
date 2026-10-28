@@ -19,18 +19,32 @@ quoted.
 """
 
 import base64
+import contextlib
 import json
+import logging
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import traceback
 from pathlib import Path
 
 MARKER = "QIBOCAL_WIDGETS_RESULT "
 """Prefix of the line carrying the outcome on the standard output."""
+PROGRESS = "QIBOCAL_WIDGETS_PROGRESS "
+"""Prefix of the lines carrying duration estimates, while acquiring."""
+ESTIMATE_LOGGERS = (
+    "qibolab._core.platform.platform",
+    "qibolab._core.instruments.qblox.cluster",
+)
+"""Loggers of the duration estimates: qibolab's, then the driver's refinement."""
+ESTIMATE = re.compile(
+    r"(?:Pulse execution time|expected execution time): ([-+.\deE]+) s"
+)
+"""Messages of the duration estimates, in seconds."""
 PLATFORMS = "QIBOLAB_PLATFORMS"
 """Environment variable locating qibolab platforms."""
 GUARD = "QIBOCAL_WIDGETS_WORKER"
@@ -40,6 +54,62 @@ REQUIREMENTS = "qibocamp-requirements.txt"
 
 Same name and content as the environments managed by Qibocamp.
 """
+
+
+# -- duration estimates ------------------------------------------------------
+
+_estimates_lock = threading.Lock()
+_estimates_callbacks: "dict[int, object]" = {}
+"""Callbacks of the threads capturing estimates, by thread identifier."""
+_estimates_levels: "dict[str, tuple[int, int]]" = {}
+"""Level and effective level of the estimate loggers, before capturing."""
+
+
+def _scrape(record: logging.LogRecord) -> bool:
+    """Logger filter: pass estimates on, hiding what was only enabled for it."""
+    callback = _estimates_callbacks.get(record.thread)
+    if callback is not None:
+        match = ESTIMATE.search(record.getMessage())
+        if match is not None:
+            with contextlib.suppress(Exception):
+                callback(float(match[1]))
+    return record.levelno >= _estimates_levels.get(record.name, (0, 0))[1]
+
+
+@contextlib.contextmanager
+def estimates(callback):
+    """Call ``callback(seconds)`` with the duration estimates logged by qibolab.
+
+    Only the estimates logged by the current thread are captured. Their
+    loggers are enabled for them, if needed, without emitting anything more
+    than before.
+    """
+    thread = threading.get_ident()
+    with _estimates_lock:
+        if not _estimates_callbacks:
+            for name in ESTIMATE_LOGGERS:
+                logger = logging.getLogger(name)
+                _estimates_levels[name] = (logger.level, logger.getEffectiveLevel())
+                if logger.getEffectiveLevel() > logging.INFO:
+                    logger.setLevel(logging.INFO)
+                logger.addFilter(_scrape)
+        _estimates_callbacks[thread] = callback
+    try:
+        yield
+    finally:
+        with _estimates_lock:
+            del _estimates_callbacks[thread]
+            if not _estimates_callbacks:
+                for name in ESTIMATE_LOGGERS:
+                    logger = logging.getLogger(name)
+                    logger.removeFilter(_scrape)
+                    logger.setLevel(_estimates_levels.pop(name)[0])
+
+
+def emit_estimate(seconds: float) -> None:
+    """Write a duration estimate line."""
+    sys.stdout.write(PROGRESS + json.dumps({"estimate": seconds}) + "\n")
+    sys.stdout.flush()
 
 
 # -- environments ------------------------------------------------------------
@@ -265,7 +335,8 @@ def acquire(job: dict) -> dict:
     executor = Executor(created, targets=job["targets"], update=False)
     created.connect()
     try:
-        completed = executor.acquire(bound, **job.get("overrides", {}))
+        with estimates(emit_estimate):
+            completed = executor.acquire(bound, **job.get("overrides", {}))
     finally:
         created.disconnect()
     with tempfile.TemporaryDirectory() as folder:

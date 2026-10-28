@@ -17,6 +17,11 @@ First development version, targeting the executor interface of Qibocal's
   remote runners and processed in submission order; displayed live in
   Jupyter; in Marimo, run in `mo.Thread` and reactive (cells referencing it run
   again when it completes), shown as a spinner replaced by the result.
+- Acquisition progress: the duration estimates logged by qibolab and its
+  drivers (e.g. Qblox) are captured, locally or streamed back by remote
+  workers, and turn the spinner of a pending execution into a progress bar,
+  restarting on each refined estimate, with the first one for comparison
+  (`Pending.estimates`).
 - `submit(..., reuse=True)`: an identical execution, running or recorded in
   the session, is returned instead of acquiring again.
 - `platforms_dir` in remote connections: the platforms folder on the remote

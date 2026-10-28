@@ -7,11 +7,16 @@ worker's standard input, and the outcome read from its standard output.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import shlex
+import signal
 import subprocess
+import threading
 from pathlib import Path
 
+from .. import progress
 from . import worker
 from .config import Connection
 
@@ -139,8 +144,17 @@ def command(
     return ["ssh", *options, *SSH_OPTIONS, destination, remote]
 
 
+def _kill(process: subprocess.Popen) -> None:
+    """Kill a process and its children (its process group)."""
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGKILL)
+
+
 def run(connection: Connection, job: dict, *, compute: bool) -> dict:
     """Execute a job remotely, and return its outcome.
+
+    Duration estimates streamed by the worker are reported, as they arrive,
+    with :func:`progress.report <qibocal_widgets._core.progress.report>`.
 
     Raises:
         RemoteError: if the worker reports a failure, or produces no outcome.
@@ -148,32 +162,60 @@ def run(connection: Connection, job: dict, *, compute: bool) -> dict:
     job = {"venv": connection.venv, **job}
     if connection.platforms_dir is not None:
         job.setdefault("platforms_dir", connection.platforms_dir)
-    try:
-        process = subprocess.run(
-            command(connection, compute=compute, action=job["action"]),
-            input=json.dumps(job),
-            capture_output=True,
-            text=True,
-            timeout=connection.timeout,
-            check=False,
+    process = subprocess.Popen(
+        command(connection, compute=compute, action=job["action"]),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,  # killed with its children, on timeout
+    )
+    # read while the job runs, for the estimates; standard error in a thread,
+    # so that neither pipe fills up
+    errors: list[str] = []
+    reader = threading.Thread(target=lambda: errors.extend(process.stderr))
+    reader.start()
+    expired = threading.Event()
+    timer = None
+    if connection.timeout is not None:
+        timer = threading.Timer(
+            connection.timeout, lambda: (expired.set(), _kill(process))
         )
-    except subprocess.TimeoutExpired as error:
+        timer.start()
+    outcome = None
+    try:
+        with contextlib.suppress(BrokenPipeError):
+            process.stdin.write(json.dumps(job))
+            process.stdin.close()
+        for line in process.stdout:
+            if line.startswith(worker.MARKER):
+                outcome = json.loads(line[len(worker.MARKER) :])
+            elif line.startswith(worker.PROGRESS):
+                with contextlib.suppress(ValueError, KeyError, TypeError):
+                    progress.report(
+                        float(json.loads(line[len(worker.PROGRESS) :])["estimate"])
+                    )
+        process.wait()
+    finally:
+        if timer is not None:
+            timer.cancel()
+        if process.poll() is None:
+            _kill(process)
+            process.wait()
+        reader.join()
+    if expired.is_set():
         raise RemoteError(
             f"Remote {job['action']} timed out after {connection.timeout} s"
-        ) from error
-    outcome = None
-    for line in process.stdout.splitlines():
-        if line.startswith(worker.MARKER):
-            outcome = json.loads(line[len(worker.MARKER) :])
+        )
     if outcome is None:
         raise RemoteError(
             f"Remote {job['action']} exited with code {process.returncode} "
             "and no outcome",
-            process.stderr,
+            "".join(errors),
         )
     if not outcome.get("ok"):
         raise RemoteError(
             f"Remote {job['action']} failed: {outcome.get('error')}",
-            outcome.get("traceback") or process.stderr,
+            outcome.get("traceback") or "".join(errors),
         )
     return outcome

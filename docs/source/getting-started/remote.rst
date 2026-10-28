@@ -187,6 +187,16 @@ result arrives.)
 result arrives, and ``pending.result()`` waits for it where needed; dependent
 cells do not run again by themselves, as usual in Jupyter.
 
+**Progress.** Qibolab logs an estimate of the duration of every execution on
+the platform, and drivers may refine it just before starting (Qblox does,
+accounting for its overheads). The estimates are captured where the
+acquisition runs, locally or by the remote worker, which streams them back
+while the job runs: the displayed spinner becomes a progress bar, filling in
+the estimated time. Each new estimate starts the bar again, since the
+acquisition starts after it, showing the first one for comparison. The
+estimates received are in ``pending.estimates``. Capturing them changes
+nothing in the logs: they are only emitted where they already were.
+
 **Avoiding repeated acquisitions.** Notebooks run cells again, unintentionally
 too (in Marimo, whenever an upstream cell changes). With ``reuse=True``,
 ``submit`` returns an identical execution instead of acquiring again: one still

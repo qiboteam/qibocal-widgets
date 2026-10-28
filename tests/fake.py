@@ -7,6 +7,7 @@ No platform is required: the callbacks only declare the context they need, and
 the acquisition only reads the platform when available.
 """
 
+import logging
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -15,6 +16,9 @@ from qibocal.auto.operation import Data, Parameters, Protocol, Results
 
 NPOINTS = 7
 DEFAULT_SCALE = 2.0
+
+ESTIMATES = (2.0, 2.5)
+"""Duration estimates logged by the ``estimated`` protocol."""
 
 RecordType = np.dtype([("signal", np.float64), ("phase", np.float64)])
 
@@ -78,3 +82,18 @@ def _update(results: FakeResults, platform, target: int):
 
 
 fake = Protocol(_acquisition, _fit, _report, _update)
+
+
+def _estimated(params: FakeParameters, platform, targets: list[int]) -> FakeData:
+    """Log duration estimates as qibolab and the Qblox driver do, then acquire."""
+    first, refined = ESTIMATES
+    logging.getLogger("qibolab._core.platform.platform").info(
+        f"Pulse execution time: {first:.3f} s"
+    )
+    logging.getLogger("qibolab._core.instruments.qblox.cluster").info(
+        f"Qblox expected execution time: {refined:.3f} s"
+    )
+    return _acquisition(params, platform, targets)
+
+
+estimated = Protocol(_estimated, _fit, _report, _update)
