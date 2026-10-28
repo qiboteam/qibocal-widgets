@@ -74,6 +74,8 @@ class Executor(QibocalExecutor):
         restore_platform: when given an existing session (see
             :meth:`Session.attach`), continue from the latest platform state
             recorded in its folder.
+        confirm: default of :meth:`submit`'s ``confirm``.
+        reuse: default of :meth:`submit`'s ``reuse``.
         **kwargs: forwarded to :class:`qibocal.Executor`.
 
     Raises:
@@ -89,6 +91,8 @@ class Executor(QibocalExecutor):
         frontends: Iterable[Frontend] = (),
         session: Session | None = None,
         restore_platform: bool = True,
+        confirm: bool = False,
+        reuse: bool = False,
         **kwargs: Any,
     ):
         if session is not None:
@@ -99,6 +103,10 @@ class Executor(QibocalExecutor):
             session = Session(self.path, self.meta)
         self.session: Session | None = session
         """The session recording the executions, if any."""
+        self.confirm = confirm
+        """Whether submitted executions wait for confirmation, by default."""
+        self.reuse = reuse
+        """Whether submitted executions reuse identical ones, by default."""
         # background executions (submit): acquisitions are serialized unless
         # the runner is concurrent, and processed in submission order
         self._instruments = threading.Lock()
@@ -283,7 +291,8 @@ class Executor(QibocalExecutor):
         bound: BoundProtocol,
         skip_fit: bool = False,
         *,
-        reuse: bool = False,
+        reuse: bool | None = None,
+        confirm: bool | None = None,
         **kwargs: Any,
     ) -> Pending:
         """Execute a protocol in the background, as ``executor(bound)``.
@@ -299,8 +308,8 @@ class Executor(QibocalExecutor):
           the instruments. The execution manages the platform connection
           itself: no ``with executor:`` is needed.
         - Executions are recorded, fitted, reported, and update the platform
-          in submission order, whatever the order their acquisitions complete
-          in. An acquisition uses the platform state at the time it starts:
+          in the order they start (submission, or confirmation), whatever the
+          order their acquisitions complete in. An acquisition uses the platform state at the time it starts:
           acquisitions submitted together do not see each other's updates.
 
         Args:
@@ -314,7 +323,12 @@ class Executor(QibocalExecutor):
                 and targets, whatever the platform state: updates of other
                 executions do not cause acquiring again. Useful where cells may
                 run again unintentionally, as in reactive notebooks; submit
-                without it to acquire again.
+                without it to acquire again. Defaults to the executor's.
+            confirm: wait for confirmation before starting: the execution is
+                ``ready``, displayed as a *Run* button, until clicked, or
+                ``pending.start()``. Only where a frontend can show it (e.g.
+                in notebooks); elsewhere, it starts at once. Reused executions
+                need no confirmation. Defaults to the executor's.
             **kwargs: execution overrides, as in ``executor(bound)``.
         """
         pending_type, thread_type = Pending, threading.Thread
@@ -324,6 +338,8 @@ class Executor(QibocalExecutor):
                 pending_type, thread_type = found
                 break
 
+        reuse = self.reuse if reuse is None else reuse
+        confirm = self.confirm if confirm is None else confirm
         key = self._reuse_key(bound, skip_fit, kwargs) if reuse else None
         if key is not None:
             with self._order:
@@ -334,32 +350,51 @@ class Executor(QibocalExecutor):
             recorded = self.session is not None and registered_name(bound.protocol)
             folder = self.session.find(key) if recorded else None
             if folder is not None:
-                pending = self._pending(pending_type, bound)
+                pending = self._pending(pending_type, bound, kwargs)
                 pending._resolve(self._reload(folder))
                 return self._submitted_to_frontends(pending)
 
-        pending = self._pending(pending_type, bound)
+        pending = self._pending(pending_type, bound, kwargs)
+        pending._launcher = partial(
+            self._launch, pending, thread_type, bound, skip_fit, kwargs, key
+        )
+        if key is not None:
+            with self._order:
+                self._running[key] = pending
+        if not (confirm and any(f.confirmable() for f in self.frontends)):
+            pending.start()
+        return self._submitted_to_frontends(pending)
+
+    def _launch(
+        self,
+        pending: Pending,
+        thread_type: type[threading.Thread],
+        bound: BoundProtocol,
+        skip_fit: bool,
+        kwargs: dict,
+        key: str | None,
+    ) -> None:
+        """Start an execution in the background, taking its processing turn."""
         with self._order:
             ticket = self._submitted
             self._submitted += 1
-            if key is not None:
-                self._running[key] = pending
-        thread = thread_type(
+        thread_type(
             target=self._background,
             args=(pending, ticket, bound, skip_fit, kwargs, key),
             name=f"qibocal-widgets-{pending.name}-{ticket}",
             daemon=True,
-        )
-        thread.start()
-        return self._submitted_to_frontends(pending)
+        ).start()
 
     def _submitted_to_frontends(self, pending: Pending) -> Pending:
         for frontend in self.frontends:
             frontend.submitted(pending)
         return pending
 
-    def _pending(self, pending_type: type[Pending], bound: BoundProtocol) -> Pending:
+    def _pending(
+        self, pending_type: type[Pending], bound: BoundProtocol, kwargs: dict
+    ) -> Pending:
         pending = pending_type(bound)
+        pending.overrides = dict(kwargs)
         for frontend in self.frontends:
             pending.views[frontend.protocol] = frontend.render_pending
         return pending

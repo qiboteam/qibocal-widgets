@@ -17,8 +17,15 @@ from qibocal.auto.operation import BoundProtocol
 from .completed import MARIMO, MIMEBUNDLE, Completed, View
 from .protocols import reference
 
-__all__ = ["Estimate", "Pending"]
+__all__ = ["Estimate", "NotStartedError", "Pending"]
 
+
+class NotStartedError(RuntimeError):
+    """An execution waiting for confirmation was waited for."""
+
+
+READY = "ready"
+"""Not started yet: waiting for confirmation (see ``Executor.submit``)."""
 WAITING = "waiting"
 """Waiting for the instruments, busy with an earlier acquisition."""
 ACQUIRING = "acquiring"
@@ -27,7 +34,7 @@ PROCESSING = "processing"
 """Recording, fitting, reporting, updating; or waiting for earlier executions to."""
 DONE = "done"
 FAILED = "failed"
-STATES = (WAITING, ACQUIRING, PROCESSING, DONE, FAILED)
+STATES = (READY, WAITING, ACQUIRING, PROCESSING, DONE, FAILED)
 
 
 @dataclass(frozen=True)
@@ -64,6 +71,9 @@ class Pending:
     or peek at it, without blocking: ``pending()`` is the result, or ``None``
     while running (and raises if the execution failed).
 
+    Submitted with ``confirm``, it is ``ready`` and waits for confirmation
+    before starting: its *Run* button, or :meth:`start`.
+
     Displayed, it shows its state; frontends may update the display when the
     execution completes. Frontends may also provide a subclass (see
     :meth:`Frontend.background <qibocal_widgets.Frontend.background>`), e.g.
@@ -82,7 +92,10 @@ class Pending:
         self.estimates: list[Estimate] = []
         """Duration estimates received while acquiring, in order: each one
         refines the previous ones, and restarts the progress bar."""
-        self._status = WAITING
+        self.overrides: dict[str, Any] = {}
+        """Execution overrides (e.g. ``targets``), as given to ``submit``."""
+        self._status = READY
+        self._launcher: Callable[[], None] | None = None
         self._callbacks: list[Callable[[Pending], None]] = []
         self._lock = threading.Lock()
 
@@ -90,8 +103,32 @@ class Pending:
 
     @property
     def status(self) -> str:
-        """One of ``waiting``, ``acquiring``, ``processing``, ``done``, ``failed``."""
+        """One of ``ready``, ``waiting``, ``acquiring``, ``processing``,
+        ``done``, ``failed``."""
         return self._status
+
+    def start(self) -> None:
+        """Start an execution waiting for confirmation (``ready``).
+
+        As its *Run* button does; nothing happens if already started.
+        """
+        with self._lock:
+            if self._status != READY:
+                return
+            self._status = WAITING
+        self._notify()
+        self._dispatch()
+
+    def _dispatch(self) -> None:
+        """Launch the execution, once started."""
+        self._run_launcher()
+
+    def _run_launcher(self) -> None:
+        """Run the launcher given by the executor, at most once."""
+        with self._lock:
+            launcher, self._launcher = self._launcher, None
+        if launcher is not None:
+            launcher()
 
     @property
     def name(self) -> str:
@@ -168,17 +205,29 @@ class Pending:
         """The completed execution, waiting for it if needed.
 
         Raises:
+            NotStartedError: if waiting for confirmation (waiting for it
+                would block the confirmation itself).
             TimeoutError: if not completed within ``timeout`` seconds.
             Exception: the error of the execution, if it failed.
         """
+        self._check_started()
         return self.future.result(timeout)
 
     def exception(self, timeout: float | None = None) -> BaseException | None:
         """The error of the execution, if it failed."""
+        self._check_started()
         return self.future.exception(timeout)
 
     def __await__(self) -> Generator[Any, None, Completed]:
+        self._check_started()
         return asyncio.wrap_future(self.future).__await__()
+
+    def _check_started(self) -> None:
+        if self._status == READY:
+            raise NotStartedError(
+                f"{self.name} is not started: press its Run button, or call "
+                "pending.start()"
+            )
 
     # -- display -------------------------------------------------------------------
 
@@ -186,6 +235,8 @@ class Pending:
         """A short description of the state."""
         if self._status == FAILED:
             return f"{self.name}: failed, {self.future.exception()!r}"
+        if self._status == READY:
+            return f"{self.name}: ready, waiting for confirmation"
         return f"{self.name}: {self._status}, submitted at {self.submitted_at:%H:%M:%S} UTC"
 
     @property

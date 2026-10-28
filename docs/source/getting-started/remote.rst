@@ -157,9 +157,10 @@ keep working.
     await pending  # with top-level await
 
 Several submissions are queued together. Their results are recorded, fitted,
-reported, and update the platform in submission order, whatever the order
-their jobs complete in; each acquisition uses the platform state at the time
-it starts, so acquisitions submitted together do not see each other's updates.
+reported, and update the platform in the order they start (submission, or
+confirmation, see below), whatever the order their jobs complete in; each
+acquisition uses the platform state at the time it starts, so acquisitions
+submitted together do not see each other's updates.
 
 **In Marimo**, background executions integrate with the reactive runtime, with
 nothing to set up: they run in a ``mo.Thread``, and a pending execution is
@@ -212,25 +213,41 @@ protocols registered in Qibocal, which it can load back. A new executor starts
 a new session, unless attached to an existing one: in Marimo, running again
 the cell defining the executor leaves nothing to reuse.
 
-**Acquiring on request, in Marimo.** Cells submitting executions reference the
-executor, so Marimo runs them whenever the executor's cell runs, including when
-it runs for the first time, because a single experiment needs it. To acquire
-only when you decide, gate the submission behind a run button, which is false
-whenever the cell runs for any other reason:
+**Acquiring on request.** Notebooks run cells for many reasons: in Marimo,
+cells submitting executions reference the executor, so they run whenever the
+executor's cell runs, including the first time, because a single experiment
+needs it. With ``confirm=True``, nothing starts by itself: each execution is
+``ready``, displayed as a *Run* button (e.g. "▶ Run ramsey", its overrides in
+the tooltip), and starts when clicked.
 
 .. code-block:: python
 
-    # one cell
-    acquire = mo.ui.run_button(label="Acquire")
-    acquire
+    executor = Executor(None, runner=Remote("lab"), frontends=[Marimo()],
+                        confirm=True, reuse=True)
 
-    # another cell
-    mo.stop(not acquire.value, mo.md("*Press* Acquire *to run the experiment.*"))
-    executor.submit(protocols.ramsey(delay=(10, 1000, 100)), nshots=500, reuse=True)
+    pending = executor.submit(protocols.ramsey(delay=(10, 1000, 100)), nshots=500)
+    pending  # a Run button, then the spinner, then the result
 
-Alternatively, set Marimo's runtime to mark dependent cells as stale instead of
-running them (``on_cell_change = "lazy"``, in the notebook settings or under
-``[tool.marimo.runtime]`` in ``pyproject.toml``), for the whole notebook.
+A notebook full of experiments then opens with their buttons, and the results
+of those already recorded in the session (reused executions need no
+confirmation). Both are executor defaults, overridden by ``submit``'s
+arguments of the same names; both are off by default.
+
+- ``pending.start()`` confirms from code, as the button does.
+- Downstream cells see ``pending()`` as ``None`` until the execution completes,
+  as while running. Waiting for an execution that is not started
+  (``pending.result()``, ``await pending``) raises
+  :class:`~qibocal_widgets.NotStartedError` instead: it would block the
+  confirmation itself.
+- Executions are processed in the order they start, not in the order they
+  were submitted: one waiting for confirmation does not hold the others.
+- Where no frontend can show the button (e.g. a script, or a notebook run as
+  an app without a browser), executions start at once, so that the same
+  notebook runs everywhere.
+
+Alternatively, in Marimo only, set the runtime to mark dependent cells as stale
+instead of running them (``on_cell_change = "lazy"``, in the notebook settings
+or under ``[tool.marimo.runtime]`` in ``pyproject.toml``).
 
 The job is held by a background thread and an open SSH connection: the kernel
 and the connection must stay alive until it completes. Detached jobs,

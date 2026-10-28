@@ -11,10 +11,11 @@ from marimo._runtime.state import State
 from qibocal.auto.task import Completed as QibocalCompleted
 
 from . import layout
+from .button import run_button
 from .completed import MARIMO, Completed
 from .data import data_frames
 from .frontend import Frontend
-from .pending import DONE, FAILED, Pending
+from .pending import DONE, FAILED, READY, Pending
 from .reports import Report, reports, reports_of
 
 __all__ = [
@@ -118,6 +119,10 @@ class Marimo(Frontend):
             return None
         return MarimoPending, mo.Thread
 
+    def confirmable(self) -> bool:
+        """In notebooks, where the *Run* button can be clicked."""
+        return mo.running_in_notebook()
+
     def submitted(self, pending: Pending) -> None:
         """Follow the execution in the cell run submitting it, new or reused.
 
@@ -158,6 +163,8 @@ class Marimo(Frontend):
             return display(pending.result())
         if pending.status == FAILED:
             return mo.callout(mo.md(f"**{pending.describe()}**"), kind="danger")
+        if pending.status == READY:
+            return mo.ui.anywidget(run_button(pending))
         bar = pending.progress()
         if bar is not None:
             return mo.Html(bar)
@@ -206,12 +213,18 @@ def _follow(pending: Pending, cell: str, run: object) -> None:
     thread = mo.current_thread()
     changed = threading.Event()
     remove = pending.on_change(lambda _: changed.set())
+    if isinstance(pending, MarimoPending):
+        pending._follow(+1)
     shown = None
     lingering = None
     try:
         while not getattr(thread, "should_exit", False):
             changed.wait(POLL)
             changed.clear()
+            if pending.status != READY:
+                # confirmed (e.g. by a click, outside of any cell): launched in
+                # the context of this cell run, as marimo threads require
+                pending._run_launcher()
             displayed = _RENDERED.get(cell)
             alone = (
                 displayed is not None
@@ -234,6 +247,13 @@ def _follow(pending: Pending, cell: str, run: object) -> None:
                     return
     finally:
         remove()
+        # confirmed as the last follower stopped: launch it anyway
+        if (
+            isinstance(pending, MarimoPending)
+            and pending._follow(-1) == 0
+            and pending.status != READY
+        ):
+            pending._run_launcher()
 
 
 class MarimoPending(Pending, State):
@@ -255,6 +275,19 @@ class MarimoPending(Pending, State):
     def __init__(self, bound):
         Pending.__init__(self, bound)
         State.__init__(self, None)
+        self._followers = 0
+
+    def _follow(self, change: int) -> int:
+        """Count the threads following this execution, returning their number."""
+        with self._lock:
+            self._followers += change
+            return self._followers
+
+    def _dispatch(self) -> None:
+        # a follower launches it, in the context of its cell run; otherwise,
+        # e.g. submitted without confirmation, in the current one
+        if self._follow(0) == 0:
+            self._run_launcher()
 
     def __call__(self):
         return Pending.__call__(self)

@@ -1,0 +1,22 @@
+.qw-run {
+  --qw-border: rgba(128, 128, 128, 0.4);
+  --qw-accent: #6400ff;
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  padding: 3px 10px;
+  border: 1px solid var(--qw-border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.qw-run:hover:not(:disabled) {
+  color: var(--qw-accent);
+  border-color: var(--qw-accent);
+}
+
+.qw-run:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

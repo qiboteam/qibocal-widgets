@@ -70,3 +70,28 @@ def test_rerun_follows(tmp_path):
     page = output.read_text()
     assert "Raw data: 0" in page
     assert "marimo-progress" not in page  # no spinner left
+
+
+def test_confirm(tmp_path):
+    """Nothing starts: the Run button is displayed, downstream cells wait."""
+    output = tmp_path / "confirm.html"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "marimo",
+            "export",
+            "html",
+            str(NOTEBOOK.parent / "confirm.py"),
+            "-o",
+            str(output),
+            "-f",
+        ],
+        check=True,
+        capture_output=True,
+        timeout=120,
+    )
+    page = output.read_text()
+    assert "ACQUISITIONS-0" in page
+    assert "DOWNSTREAM-READY" in page
+    assert "Run fake" in page

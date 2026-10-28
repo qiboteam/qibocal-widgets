@@ -230,7 +230,8 @@ returns a :class:`~qibocal_widgets.Pending` execution at once: peek at it with
 ``pending()``, wait for it with ``pending.result()``, or ``await pending``. In
 Marimo, it is reactive state: cells referencing it run again when it completes.
 ``reuse=True`` returns an identical execution, running or recorded, instead of
-acquiring again. While acquiring, the display shows a progress bar from the
+acquiring again; ``confirm=True`` waits for a click on its *Run* button before
+starting. Both can be set as executor defaults (see :doc:`remote`). While acquiring, the display shows a progress bar from the
 duration estimated by qibolab (see :doc:`remote`). Executions are processed in
 submission order; with the
 local runner, acquisitions wait for each other, sharing the instruments, and

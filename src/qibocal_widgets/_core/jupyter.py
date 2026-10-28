@@ -13,10 +13,11 @@ from IPython.display import display as ipy_display
 from qibocal.auto.task import Completed as QibocalCompleted
 
 from . import layout
+from .button import run_button
 from .completed import MIMEBUNDLE, Completed
 from .data import data_frames
 from .frontend import Frontend
-from .pending import DONE, FAILED, Pending
+from .pending import DONE, FAILED, READY, Pending
 from .reports import Report, reports, reports_of
 
 __all__ = [
@@ -151,6 +152,10 @@ class Jupyter(Frontend):
     def render(self, completed: QibocalCompleted) -> Any:
         return display(completed)
 
+    def confirmable(self) -> bool:
+        """In a kernel, where the *Run* button can be clicked."""
+        return _kernel() is not None
+
     def render_pending(self, pending: Pending) -> Any:
         """A live view: the state (a progress bar, once estimated), replaced by
         the result once completed."""
@@ -161,6 +166,8 @@ class Jupyter(Frontend):
                 box.children = [display(pending.result())]
             elif pending.status == FAILED:
                 box.children = [widgets.HTML(f"<pre>{pending.describe()}</pre>")]
+            elif pending.status == READY:
+                box.children = [run_button(pending)]
             elif (bar := pending.progress()) is not None:
                 box.children = [widgets.HTML(bar)]
             else:
@@ -179,14 +186,20 @@ def _on_kernel(function: Any, *args: Any) -> None:
     of the whole kernel: they are only safe on the main thread. Outside of a
     kernel, the function runs immediately.
     """
-    from IPython import get_ipython
-
-    kernel = getattr(get_ipython(), "kernel", None)
-    loop = getattr(kernel, "io_loop", None)
+    loop = getattr(_kernel(), "io_loop", None)
     if loop is None:
         function(*args)
     else:
         loop.add_callback(function, *args)
+
+
+def _kernel() -> Any:
+    """The running IPython kernel, if any."""
+    try:
+        from IPython import get_ipython
+    except ImportError:
+        return None
+    return getattr(get_ipython(), "kernel", None)
 
 
 def wrap(completed: QibocalCompleted) -> Completed:

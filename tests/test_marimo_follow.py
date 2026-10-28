@@ -137,7 +137,7 @@ def test_other_executions_displayed_earlier(cells):
     runner.gate.set()
     pending.result(10)
     wait_for(lambda: cells.outputs and cells.outputs[-1][0] is cells.run)
-    wait_for(lambda: "Target 0" in shown(cells)[-1])
+    wait_for(lambda: shown(cells) and "Target 0" in shown(cells)[-1])
 
 
 def test_several_in_one_cell_not_replaced(cells):
@@ -164,3 +164,36 @@ def test_result_set_before_status(cells):
     time.sleep(0.2)
     pending._set("failed")  # any final state, rendered without a result
     wait_for(lambda: "failed" in shown(cells)[-1])
+
+
+def test_confirmed_by_click(cells):
+    """The click only confirms: the follower of the cell run launches it."""
+    from qibocal_widgets._core.button import Button
+
+    runner = Gated()
+    runner.gate.set()
+    ex = Executor(
+        None,
+        targets=TARGETS,
+        update=False,
+        runner=runner,
+        frontends=[Marimo()],
+        confirm=True,
+    )
+    pending = ex.submit(fake(npoints=3))
+    assert pending.status == "ready"
+    view = pending._display_()
+    button = view.widget if hasattr(view, "widget") else view._widget
+    assert isinstance(button, Button)
+    launched_in = []
+    original = pending._launcher
+    pending._launcher = lambda: (
+        launched_in.append(threading.current_thread()),
+        original(),
+    )
+    clicker = threading.Thread(target=button.click)  # as a frontend message
+    clicker.start()
+    clicker.join()
+    pending.result(10)
+    assert launched_in and launched_in[0] is not clicker  # by the follower
+    wait_for(lambda: shown(cells) and "Target 0" in shown(cells)[-1])

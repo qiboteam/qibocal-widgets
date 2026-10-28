@@ -130,6 +130,8 @@ def _(remote):
         update=True,
         runner=remote,
         frontends=[Marimo()],
+        confirm=True,
+        reuse=True,
     )
     executor.path
     return (executor,)
@@ -163,30 +165,21 @@ def _():
     The cell shows a spinner, replaced by the result when it arrives; the data
     are recorded in the session, fitted and reported here.
 
-    With `reuse=True`, running the cell again (e.g. after editing an upstream
-    cell) returns the identical execution instead of acquiring again: the one
-    still running, or the one recorded in the session.
+    The executor is created with `confirm=True`: nothing starts by itself,
+    even when Marimo runs the cell again (e.g. after editing an upstream
+    cell). Each execution shows a *Run* button first, and starts when clicked.
 
-    The cell references the executor, so Marimo would run it whenever the
-    executor's cell runs: the run button makes acquiring a decision instead.
+    With `reuse=True`, executions identical to one still running, or recorded
+    in the session, are returned instead of acquiring again, with no
+    confirmation needed.
     """)
     return
 
 
 @app.cell
-def _():
-    acquire = mo.ui.run_button(label="Acquire")
-    acquire
-    return (acquire,)
-
-
-@app.cell
-def _(acquire, executor, start):
+def _(executor, start):
     assert start is not None
-    mo.stop(not acquire.value, mo.md("*Press* Acquire *to run the experiment.*"))
-    pending = executor.submit(
-        protocols.ramsey(delay=(10, 1000, 100)), nshots=500, reuse=True
-    )
+    pending = executor.submit(protocols.ramsey(delay=(10, 1000, 100)), nshots=500)
     pending
     return (pending,)
 
@@ -236,7 +229,6 @@ def _(executor, ramsey):
             min_amp=0.0, max_amp=0.6, step_amp=0.03, pulse_length=40
         ),
         nshots=500,
-        reuse=True,
     )
     rabi
     return (rabi,)
@@ -245,9 +237,7 @@ def _(executor, ramsey):
 @app.cell
 def _(executor, ramsey):
     assert ramsey is not None
-    check = executor.submit(
-        protocols.ramsey(delay=(10, 1000, 200)), nshots=500, reuse=True
-    )
+    check = executor.submit(protocols.ramsey(delay=(10, 1000, 200)), nshots=500)
     check
     return (check,)
 

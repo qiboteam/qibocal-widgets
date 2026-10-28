@@ -56,6 +56,14 @@ class Frontend:
         """
         return None
 
+    def confirmable(self) -> bool:
+        """Whether executions can be confirmed here, e.g. with a button.
+
+        Executions submitted with ``confirm`` only wait for confirmation if a
+        frontend can show it; elsewhere (e.g. in scripts) they start at once.
+        """
+        return False
+
     def submitted(self, pending: Pending) -> None:
         """Called with every execution returned by ``Executor.submit``.
 

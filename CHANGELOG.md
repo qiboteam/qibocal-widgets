@@ -22,6 +22,11 @@ First development version, targeting the executor interface of Qibocal's
   workers, and turn the spinner of a pending execution into a progress bar,
   restarting on each refined estimate, with the first one for comparison, and
   the batches done, when the driver estimates them (`Pending.estimates`).
+- `confirm`: executions wait for confirmation, displayed as a *Run* button
+  (`pending.start()` from code), so that notebooks start nothing by
+  themselves; only where a frontend can show it, at once elsewhere.
+- `Executor(confirm=..., reuse=...)`: defaults of `submit`'s arguments, both
+  off by default.
 - `submit(..., reuse=True)`: an identical execution, running or recorded in
   the session, is returned instead of acquiring again (same protocol,
   parameters, overrides, and targets, whatever the platform state).
