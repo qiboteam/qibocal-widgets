@@ -309,10 +309,12 @@ class Executor(QibocalExecutor):
             reuse: return an identical execution instead of acquiring again,
                 if any: one still running, or one recorded in the session
                 (loaded from disk; only for protocols registered in
-                ``qibocal.protocols``, which Qibocal can load back). Executions are identical with the same
-                protocol, parameters, overrides, targets, and platform state.
-                Useful where cells may run again unintentionally, as in
-                reactive notebooks.
+                ``qibocal.protocols``, which Qibocal can load back). Executions
+                are identical with the same protocol, parameters, overrides,
+                and targets, whatever the platform state: updates of other
+                executions do not cause acquiring again. Useful where cells may
+                run again unintentionally, as in reactive notebooks; submit
+                without it to acquire again.
             **kwargs: execution overrides, as in ``executor(bound)``.
         """
         pending_type, thread_type = Pending, threading.Thread
@@ -379,7 +381,6 @@ class Executor(QibocalExecutor):
                 ),
                 "targets": parameters_document(targets),
                 "skip_fit": skip_fit,
-                "state": self.runner.platform_state(self),
             }
         except TypeError:
             return None

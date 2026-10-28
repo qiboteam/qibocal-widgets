@@ -331,17 +331,19 @@ def test_reuse_platform_state(monkeypatch, bound):
 
     monkeypatch.setenv("QIBOLAB_PLATFORMS", str(PLATFORMS))
     runner = Counting()
-    runner.gate.set()
     executor = Executor(
         create_calibration_platform("mock"),
         targets=TARGETS,
         update=False,
         runner=runner,
     )
-    executor.submit(bound, reuse=True).result(10)
+    first = executor.submit(bound, reuse=True)
     executor.platform_state.update({"configs.0/drive.frequency": 4.2e9})
-    executor.submit(bound, reuse=True).result(10)
-    assert runner.count == 2  # the platform changed: not identical
+    # e.g. updated by another execution: still identical
+    assert executor.submit(bound, reuse=True) is first
+    runner.gate.set()
+    first.result(10)
+    assert runner.count == 1
 
 
 # -- duration estimates ------------------------------------------------------------

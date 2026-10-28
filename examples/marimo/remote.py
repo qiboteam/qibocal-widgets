@@ -166,13 +166,24 @@ def _():
     With `reuse=True`, running the cell again (e.g. after editing an upstream
     cell) returns the identical execution instead of acquiring again: the one
     still running, or the one recorded in the session.
+
+    The cell references the executor, so Marimo would run it whenever the
+    executor's cell runs: the run button makes acquiring a decision instead.
     """)
     return
 
 
 @app.cell
-def _(executor, start):
+def _():
+    acquire = mo.ui.run_button(label="Acquire")
+    acquire
+    return (acquire,)
+
+
+@app.cell
+def _(acquire, executor, start):
     assert start is not None
+    mo.stop(not acquire.value, mo.md("*Press* Acquire *to run the experiment.*"))
     pending = executor.submit(
         protocols.ramsey(delay=(10, 1000, 100)), nshots=500, reuse=True
     )

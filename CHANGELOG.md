@@ -23,7 +23,8 @@ First development version, targeting the executor interface of Qibocal's
   restarting on each refined estimate, with the first one for comparison, and
   the batches done, when the driver estimates them (`Pending.estimates`).
 - `submit(..., reuse=True)`: an identical execution, running or recorded in
-  the session, is returned instead of acquiring again.
+  the session, is returned instead of acquiring again (same protocol,
+  parameters, overrides, and targets, whatever the platform state).
 - `platforms_dir` in remote connections: the platforms folder on the remote
   machine, replacing its `QIBOLAB_PLATFORMS`, so that a stored connection
   needs no environment variable there.

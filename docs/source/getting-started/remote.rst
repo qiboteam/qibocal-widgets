@@ -203,11 +203,34 @@ nothing in the logs: they are only emitted where they already were.
 too (in Marimo, whenever an upstream cell changes). With ``reuse=True``,
 ``submit`` returns an identical execution instead of acquiring again: one still
 running, or one recorded in the session, loaded from disk. Executions are
-identical with the same protocol, parameters, overrides, targets, and platform
-state: after an update, the protocol is acquired again. Nothing is cached
-besides the session itself, which records a small key next to each execution;
-reusing recorded executions works across kernel restarts (attaching the
-session), for protocols registered in Qibocal, which it can load back.
+identical with the same protocol, parameters, overrides, and targets, whatever
+the platform state: the updates of other executions do not cause acquiring
+again (submit without ``reuse`` for that). Nothing is cached besides the
+session itself, which records a small key next to each execution; reusing
+recorded executions works across kernel restarts (attaching the session), for
+protocols registered in Qibocal, which it can load back. A new executor starts
+a new session, unless attached to an existing one: in Marimo, running again
+the cell defining the executor leaves nothing to reuse.
+
+**Acquiring on request, in Marimo.** Cells submitting executions reference the
+executor, so Marimo runs them whenever the executor's cell runs, including when
+it runs for the first time, because a single experiment needs it. To acquire
+only when you decide, gate the submission behind a run button, which is false
+whenever the cell runs for any other reason:
+
+.. code-block:: python
+
+    # one cell
+    acquire = mo.ui.run_button(label="Acquire")
+    acquire
+
+    # another cell
+    mo.stop(not acquire.value, mo.md("*Press* Acquire *to run the experiment.*"))
+    executor.submit(protocols.ramsey(delay=(10, 1000, 100)), nshots=500, reuse=True)
+
+Alternatively, set Marimo's runtime to mark dependent cells as stale instead of
+running them (``on_cell_change = "lazy"``, in the notebook settings or under
+``[tool.marimo.runtime]`` in ``pyproject.toml``), for the whole notebook.
 
 The job is held by a background thread and an open SSH connection: the kernel
 and the connection must stay alive until it completes. Detached jobs,
