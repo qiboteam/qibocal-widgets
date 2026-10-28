@@ -16,7 +16,7 @@ import traitlets
 if TYPE_CHECKING:
     from ..pending import Pending
 
-__all__ = ["Button", "run_button"]
+__all__ = ["Button", "again_button", "run_button"]
 
 HERE = Path(__file__).parent
 
@@ -59,3 +59,8 @@ def tooltip(pending: Pending) -> str:
 def run_button(pending: Pending) -> Button:
     """The *Run* button of an execution waiting for confirmation."""
     return Button(f"▶ Run {pending.name}", pending.start, tooltip(pending))
+
+
+def again_button(pending: Pending) -> Button:
+    """The *Run again* button of a completed execution."""
+    return Button("↻ Run again", pending.rerun, tooltip(pending))

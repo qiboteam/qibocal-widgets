@@ -201,7 +201,7 @@ def test_frontends(bound):
     assert "acquiring" in box.children[0].value
     runner.gate(bound.parameters.npoints).set()
     completed = pending.result(10)
-    wait_for(lambda: isinstance(box.children[0], widgets.Tab))  # updated live
+    wait_for(lambda: isinstance(box.children[-1], widgets.Tab))  # updated live
     assert "Target 0" in pending._display_().text
     assert "_display_" in completed.views
 
@@ -431,7 +431,7 @@ def test_estimate_views(bound):
     assert "1 min 30 s" in pending._display_().text
     runner.gate(bound.parameters.npoints).set()
     pending.result(10)
-    wait_for(lambda: isinstance(box.children[0], widgets.Tab))
+    wait_for(lambda: isinstance(box.children[-1], widgets.Tab))
 
 
 def test_batches(bound):

@@ -197,3 +197,27 @@ def test_confirmed_by_click(cells):
     pending.result(10)
     assert launched_in and launched_in[0] is not clicker  # by the follower
     wait_for(lambda: shown(cells) and "Target 0" in shown(cells)[-1])
+
+
+def test_run_again_by_click(cells):
+    """The follower of a completed execution launches it again, when clicked."""
+    runner = Gated()
+    ex = executor(runner)
+    pending = ex.submit(fake(npoints=3))
+    pending._display_()  # while running
+    runner.gate.set()
+    pending.result(10)
+    wait_for(lambda: shown(cells) and "Target 0" in shown(cells)[-1])
+    replaced = len(cells.outputs)
+    original = pending._rerun
+    launched_in = []
+    pending._rerun = lambda: (
+        launched_in.append(threading.current_thread()),
+        original(),
+    )
+    clicker = threading.Thread(target=pending.rerun)  # as the button does
+    clicker.start()
+    clicker.join()
+    wait_for(lambda: runner.count == 2 and pending.status == "done")
+    assert launched_in and launched_in[0] is not clicker  # by the follower
+    wait_for(lambda: len(cells.outputs) > replaced and "Target 0" in shown(cells)[-1])

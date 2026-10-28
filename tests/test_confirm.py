@@ -209,7 +209,7 @@ def test_jupyter_run_button(monkeypatch):
     assert button.tooltip == "fake(nshots=10)"
     button.click()
     pending.result(10)
-    wait_for(lambda: isinstance(box.children[0], widgets.Tab))  # the result
+    wait_for(lambda: isinstance(box.children[-1], widgets.Tab))  # the result
 
 
 def test_jupyter_confirmable_in_kernel_only():
@@ -217,3 +217,97 @@ def test_jupyter_confirmable_in_kernel_only():
     from qibocal_widgets.jupyter import Jupyter
 
     assert not Jupyter().confirmable()  # no kernel in tests
+
+
+# -- running again ----------------------------------------------------------------
+
+
+def test_rerun(tmp_path):
+    runner = Counting()
+    executor = Executor(
+        None, path=tmp_path / "s", targets=TARGETS, update=False, runner=runner
+    )
+    pending = executor.submit(fake(npoints=3))
+    first = pending.result(10)
+    pending.rerun()
+    assert pending.status in ("waiting", "acquiring", "processing", "done")
+    second = pending.result(10)
+    assert second is not first
+    assert (first.path.name, second.path.name) == ("fake-0", "fake-1")
+    assert pending() is second and runner.count == 2
+
+
+def test_rerun_only_once_completed():
+    gate = threading.Event()
+
+    class Slow(Counting):
+        def acquire(self, executor, bound, **kwargs):
+            assert gate.wait(10)
+            return super().acquire(executor, bound, **kwargs)
+
+    runner = Slow()
+    executor = Executor(
+        None,
+        targets=TARGETS,
+        update=False,
+        runner=runner,
+        frontends=[Confirmable()],
+        confirm=True,
+    )
+    pending = executor.submit(fake(npoints=3))
+    pending.rerun()  # ready: nothing happens
+    assert pending.status == "ready"
+    pending.start()
+    pending.rerun()  # running: nothing happens
+    gate.set()
+    pending.result(10)
+    time.sleep(0.1)
+    assert runner.count == 1
+
+
+def test_rerun_recorded(tmp_path, monkeypatch):
+    """Running again a reused execution acquires, and is reused afterwards."""
+    from qibocal import create_calibration_platform, protocols
+
+    monkeypatch.setenv("QIBOLAB_PLATFORMS", str(PLATFORMS))
+    bound = protocols.ramsey_signal(
+        delay_between_pulses_start=10,
+        delay_between_pulses_end=100,
+        delay_between_pulses_step=30,
+    )
+    runner = Counting()
+    executor = Executor(
+        create_calibration_platform("mock"),
+        path=tmp_path / "s",
+        targets=TARGETS,
+        update=False,
+        runner=runner,
+        reuse=True,
+    )
+    executor.submit(bound).result(10)
+    reused = executor.submit(bound)
+    assert reused.status == "done" and runner.count == 1
+    reused.rerun()
+    latest = reused.result(10)
+    assert runner.count == 2
+    assert executor.submit(bound)().path == latest.path  # the latest is reused
+
+
+def test_jupyter_run_again():
+    widgets = pytest.importorskip("ipywidgets")
+    from qibocal_widgets._core.button import Button
+    from qibocal_widgets.jupyter import Jupyter
+
+    runner = Counting()
+    executor = Executor(
+        None, targets=TARGETS, update=False, runner=runner, frontends=[Jupyter()]
+    )
+    pending = executor.submit(fake(npoints=3))
+    pending.result(10)
+    box = pending.views["_repr_mimebundle_"](pending)
+    again, result = box.children
+    assert isinstance(again, Button) and again.label == "↻ Run again"
+    assert isinstance(result, widgets.Tab)
+    again.click()
+    wait_for(lambda: runner.count == 2 and pending.status == "done")
+    wait_for(lambda: isinstance(box.children[-1], widgets.Tab))

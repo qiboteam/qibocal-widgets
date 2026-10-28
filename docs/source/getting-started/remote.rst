@@ -245,6 +245,14 @@ arguments of the same names; both are off by default.
   an app without a browser), executions start at once, so that the same
   notebook runs everywhere.
 
+**Running again.** A completed execution shows a *Run again* button
+(``pending.rerun()`` from code), whatever ``reuse``: the protocol is acquired
+again, and recorded anew in the session, where reuse then finds the latest.
+The same handle follows the new execution: cells referencing it see it running
+again, then the new result. Each protocol runs again on its own: the protocols
+depending on its update, submitted elsewhere, are not repeated, and with
+``reuse`` they keep their recorded results until run again as well.
+
 Alternatively, in Marimo only, set the runtime to mark dependent cells as stale
 instead of running them (``on_cell_change = "lazy"``, in the notebook settings
 or under ``[tool.marimo.runtime]`` in ``pyproject.toml``).

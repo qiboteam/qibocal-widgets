@@ -72,7 +72,8 @@ class Pending:
     while running (and raises if the execution failed).
 
     Submitted with ``confirm``, it is ``ready`` and waits for confirmation
-    before starting: its *Run* button, or :meth:`start`.
+    before starting: its *Run* button, or :meth:`start`. Once completed, it
+    can run again, with its *Run again* button, or :meth:`rerun`.
 
     Displayed, it shows its state; frontends may update the display when the
     execution completes. Frontends may also provide a subclass (see
@@ -96,6 +97,9 @@ class Pending:
         """Execution overrides (e.g. ``targets``), as given to ``submit``."""
         self._status = READY
         self._launcher: Callable[[], None] | None = None
+        self._rerun: Callable[[], None] | None = None
+        self._runs = 0
+        """Times the execution ran again (see :meth:`rerun`)."""
         self._callbacks: list[Callable[[Pending], None]] = []
         self._lock = threading.Lock()
 
@@ -118,6 +122,30 @@ class Pending:
             self._status = WAITING
         self._notify()
         self._dispatch()
+
+    def rerun(self) -> None:
+        """Run a completed execution again, as its *Run again* button does.
+
+        The same handle follows the new execution: ``pending()`` is ``None``
+        again until it completes, ``result()`` waits for it. It ignores reuse:
+        the protocol is acquired again, and recorded anew in the session. Nothing
+        happens while running, or waiting for confirmation.
+        """
+        with self._lock:
+            if self._status not in (DONE, FAILED) or self._rerun is None:
+                return
+            self.future = Future()
+            self._runs += 1
+            self.submitted_at = datetime.now(UTC)
+            self.estimates = []
+            self._launcher = self._rerun
+            self._status = WAITING
+        self._restarted()
+        self._notify()
+        self._dispatch()
+
+    def _restarted(self) -> None:
+        """Hook run when the execution runs again (see :meth:`rerun`)."""
 
     def _dispatch(self) -> None:
         """Launch the execution, once started."""

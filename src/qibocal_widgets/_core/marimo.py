@@ -11,7 +11,7 @@ from marimo._runtime.state import State
 from qibocal.auto.task import Completed as QibocalCompleted
 
 from . import layout
-from .button import run_button
+from .button import again_button, run_button
 from .completed import MARIMO, Completed
 from .data import data_frames
 from .frontend import Frontend
@@ -126,12 +126,12 @@ class Marimo(Frontend):
     def submitted(self, pending: Pending) -> None:
         """Follow the execution in the cell run submitting it, new or reused.
 
-        A ``mo.Thread`` of the current run replaces the displayed spinner with
-        the progress, then the result. It stops when the cell runs again: the
-        new run follows the execution itself, if it submits it again (e.g.
-        reused).
+        A ``mo.Thread`` of the current run replaces the displayed output with
+        the progress, then the result, and launches the execution when
+        confirmed or run again. It stops when the cell runs again: the new run
+        follows the execution itself, if it submits it again (e.g. reused).
         """
-        if not isinstance(pending, MarimoPending) or pending.status in ENDED:
+        if not isinstance(pending, MarimoPending):
             return
         cell, run = _run()
         if cell is None:
@@ -160,9 +160,12 @@ class Marimo(Frontend):
                 shown = _RENDERED[cell] = (run, set(), time.monotonic())
             shown[1].add(id(pending))
         if pending.status == DONE:
-            return display(pending.result())
+            again = mo.ui.anywidget(again_button(pending))
+            return mo.vstack([again, display(pending.result())])
         if pending.status == FAILED:
-            return mo.callout(mo.md(f"**{pending.describe()}**"), kind="danger")
+            again = mo.ui.anywidget(again_button(pending))
+            error = mo.callout(mo.md(f"**{pending.describe()}**"), kind="danger")
+            return mo.vstack([again, error])
         if pending.status == READY:
             return mo.ui.anywidget(run_button(pending))
         bar = pending.progress()
@@ -179,8 +182,10 @@ ENDED = (DONE, FAILED)
 """States of a completed execution."""
 POLL = 1.0
 """Seconds between checks of a followed execution, besides its changes."""
+IDLE = 10.0
+"""The same, once completed: only checking whether the cell ran again."""
 LINGER = 5.0
-"""Seconds to keep following a completed execution, until it is displayed."""
+"""Seconds to keep checking a completed execution, until it is displayed."""
 GRACE = 0.25
 """Seconds between a cell displaying an execution and replacing its output.
 
@@ -215,11 +220,13 @@ def _follow(pending: Pending, cell: str, run: object) -> None:
     remove = pending.on_change(lambda _: changed.set())
     if isinstance(pending, MarimoPending):
         pending._follow(+1)
-    shown = None
-    lingering = None
+    # a completed execution is displayed as such: nothing to replace yet
+    shown = (pending.status, 0, pending._runs) if pending.status in ENDED else None
+    ended = None
+    idle = False
     try:
         while not getattr(thread, "should_exit", False):
-            changed.wait(POLL)
+            changed.wait(IDLE if idle else POLL)
             changed.clear()
             if pending.status != READY:
                 # confirmed (e.g. by a click, outside of any cell): launched in
@@ -233,18 +240,16 @@ def _follow(pending: Pending, cell: str, run: object) -> None:
             )
             if alone and (wait := displayed[2] + GRACE - time.monotonic()) > 0:
                 time.sleep(wait)  # until the displayed output has been sent
-            state = (pending.status, len(pending.estimates))
+            state = (pending.status, len(pending.estimates), pending._runs)
             if alone and state != shown:
                 mo.output.replace(pending._display_())
                 shown = state
-            # the status, not `done()`: it changes last, once the result is set
-            if state[0] in ENDED:
-                if shown == state:
-                    return
-                # completed before being displayed: the display may follow
-                lingering = lingering or time.monotonic()
-                if time.monotonic() - lingering > LINGER:
-                    return
+            # the status, not `done()`: it changes last, once the result is set;
+            # once shown, or not displayed, wait for it to run again
+            ended = (ended or time.monotonic()) if state[0] in ENDED else None
+            idle = ended is not None and (
+                shown == state or time.monotonic() - ended > LINGER
+            )
     finally:
         remove()
         # confirmed as the last follower stopped: launch it anyway
@@ -291,6 +296,10 @@ class MarimoPending(Pending, State):
 
     def __call__(self):
         return Pending.__call__(self)
+
+    def _restarted(self) -> None:
+        # the cells referencing this execution see it running again
+        self._set_value(self.status)
 
     def _completed(self) -> None:
         # rerun the cells referencing this execution; the displayed spinners

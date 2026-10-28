@@ -341,23 +341,26 @@ class Executor(QibocalExecutor):
         reuse = self.reuse if reuse is None else reuse
         confirm = self.confirm if confirm is None else confirm
         key = self._reuse_key(bound, skip_fit, kwargs) if reuse else None
+        folder = None
         if key is not None:
             with self._order:
                 running = self._running.get(key)
             if running is not None:
                 return self._submitted_to_frontends(running)
             # only registered protocols can be loaded back from disk
-            recorded = self.session is not None and registered_name(bound.protocol)
-            folder = self.session.find(key) if recorded else None
-            if folder is not None:
-                pending = self._pending(pending_type, bound, kwargs)
-                pending._resolve(self._reload(folder))
-                return self._submitted_to_frontends(pending)
+            if self.session is not None and registered_name(bound.protocol):
+                folder = self.session.find(key)
 
         pending = self._pending(pending_type, bound, kwargs)
-        pending._launcher = partial(
+        # the same launcher starts the execution, and runs it again
+        pending._rerun = partial(
             self._launch, pending, thread_type, bound, skip_fit, kwargs, key
         )
+        if folder is not None:
+            pending._resolve(self._reload(folder))
+            return self._submitted_to_frontends(pending)
+
+        pending._launcher = pending._rerun
         if key is not None:
             with self._order:
                 self._running[key] = pending
@@ -378,6 +381,8 @@ class Executor(QibocalExecutor):
         with self._order:
             ticket = self._submitted
             self._submitted += 1
+            if key is not None:
+                self._running[key] = pending
         thread_type(
             target=self._background,
             args=(pending, ticket, bound, skip_fit, kwargs, key),

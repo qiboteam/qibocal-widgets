@@ -13,7 +13,7 @@ from IPython.display import display as ipy_display
 from qibocal.auto.task import Completed as QibocalCompleted
 
 from . import layout
-from .button import run_button
+from .button import again_button, run_button
 from .completed import MIMEBUNDLE, Completed
 from .data import data_frames
 from .frontend import Frontend
@@ -157,15 +157,19 @@ class Jupyter(Frontend):
         return _kernel() is not None
 
     def render_pending(self, pending: Pending) -> Any:
-        """A live view: the state (a progress bar, once estimated), replaced by
-        the result once completed."""
+        """A live view: the *Run* button, if waiting for confirmation, the
+        state (a progress bar, once estimated), then the result, with a *Run
+        again* button."""
         box = widgets.VBox([])
 
         def show(pending: Pending) -> None:
             if pending.status == DONE:
-                box.children = [display(pending.result())]
+                box.children = [again_button(pending), display(pending.result())]
             elif pending.status == FAILED:
-                box.children = [widgets.HTML(f"<pre>{pending.describe()}</pre>")]
+                box.children = [
+                    again_button(pending),
+                    widgets.HTML(f"<pre>{pending.describe()}</pre>"),
+                ]
             elif pending.status == READY:
                 box.children = [run_button(pending)]
             elif (bar := pending.progress()) is not None:

@@ -25,6 +25,8 @@ First development version, targeting the executor interface of Qibocal's
 - `confirm`: executions wait for confirmation, displayed as a *Run* button
   (`pending.start()` from code), so that notebooks start nothing by
   themselves; only where a frontend can show it, at once elsewhere.
+- *Run again* button on completed executions (`pending.rerun()`), whatever
+  `reuse`: the same handle follows the new execution, recorded anew.
 - `Executor(confirm=..., reuse=...)`: defaults of `submit`'s arguments, both
   off by default.
 - `submit(..., reuse=True)`: an identical execution, running or recorded in
