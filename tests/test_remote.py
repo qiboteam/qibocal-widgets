@@ -338,8 +338,9 @@ def test_remote_update_state(bound, cluster, mock_frequency):
     completed = executor(bound)
     assert completed.data.scale == {0: mock_frequency[0]}
 
-    # the update ran on the access node, outside of the queue
-    assert [call["tool"] for call in cluster()] == ["ssh", "srun", "ssh"]
+    # the update ran on the access node, outside of the queue, after asking
+    # the state it starts from, once (for the history)
+    assert [call["tool"] for call in cluster()] == ["ssh", "srun", "ssh", "ssh"]
     peak = completed.results.peak[0]
     drive = create_calibration_platform("mock").qubits[0].drive
     parameters = json.loads(remote.state["parameters"])

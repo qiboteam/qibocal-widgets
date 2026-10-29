@@ -22,6 +22,10 @@ First development version, targeting the executor interface of Qibocal's
   workers, and turn the spinner of a pending execution into a progress bar,
   restarting on each refined estimate, with the first one for comparison, and
   the batches done, when the driver estimates them (`Pending.estimates`).
+- `executor.history`: the platform states of the session, as diffs, with
+  their origin (updates, edits, restores, external changes); compared,
+  restored entirely (forking the history) or for some paths, recorded in the
+  session folder, and explored interactively (`history.explore()`).
 - `PlatformState.save()`: the state written back to the platform folder (on
   the remote machine, for remote runners without a local platform), or to any
   folder, formatted as qibolab dumps it; files are replaced in git working

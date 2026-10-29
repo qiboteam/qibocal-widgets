@@ -88,6 +88,46 @@ respect to another state:
     start = PlatformState.load(executor.path / "platform")
     executor.platform_state.diff(start)  # {path: (before, now)}
 
+History
+-------
+
+Every change of the platform state through the executor is recorded in
+:attr:`executor.history <qibocal_widgets.Executor.history>`, as the leaves it
+changed: protocol updates (automatic or approved), edits, restores, and
+changes made outside of the executor, noticed before the next one.
+
+.. code-block:: python
+
+    history = executor.history
+    history.log()  # a table of the entries
+    history.diff(3)  # what changed since entry 3: {path: (then, now)}
+    history.diff("rabi-0", 7)  # between two entries (or execution folders)
+    history.state(3)  # the state after an entry, as a snapshot
+
+    history.restore(3)  # back to the state of entry 3
+    history.restore(3, ["calibration.single_qubits.0"])  # some paths only
+
+    history.explore()  # compare and restore, interactively
+
+- Entries are addressed by number, by negative index (``-1``, the latest), or
+  by the folder name of the execution whose update they record.
+- Restoring an entry entirely continues from it: the following changes fork
+  the history there, as a branch would, and nothing is lost. Restoring some
+  paths (leaves, or whole branches such as a qubit) sets their values as they
+  were, on top of the current state.
+- The history lives in the session folder (``platform-history.jsonl``), so
+  that attaching a session continues it. Executions reused from the session
+  show their update as applied, if it was.
+- The explorer lists the entries (other branches dimmed), compares two of them
+  (A and B), and restores A, entirely or for the selected paths, showing the
+  equivalent code.
+
+Branches are not merged: platform parameters are physically coupled (e.g. a
+drive amplitude calibrated at a given frequency), so changes to different
+paths may still be incompatible. Restore paths explicitly instead. Durable,
+shared versions of the platform belong to its folder, saved below, and its
+git repository.
+
 Saving
 ------
 

@@ -37,6 +37,7 @@ from ._core.completed import Completed, View, convert
 from ._core.data import data_frames
 from ._core.executor import Executor
 from ._core.frontend import Frontend
+from ._core.history import Entry, PlatformHistory
 from ._core.middleware import Middleware
 from ._core.output import reports_dir
 from ._core.pending import Estimate, NotStartedError, Pending
@@ -48,6 +49,7 @@ from ._core.version import __version__
 
 __all__ = [
     "Completed",
+    "Entry",
     "Estimate",
     "Executor",
     "Frontend",
@@ -55,6 +57,7 @@ __all__ = [
     "Middleware",
     "NotStartedError",
     "Pending",
+    "PlatformHistory",
     "PlatformState",
     "ReadOnlyState",
     "Report",

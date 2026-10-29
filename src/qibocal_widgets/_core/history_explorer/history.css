@@ -1,0 +1,114 @@
+.qw-history {
+  --qw-border: rgba(128, 128, 128, 0.3);
+  --qw-accent: #6400ff;
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  max-width: 100%;
+}
+
+.qw-history .qw-scroll {
+  max-height: 16em;
+  overflow: auto;
+  border: 1px solid var(--qw-border);
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.qw-history .qw-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.qw-history th {
+  position: sticky;
+  top: 0;
+  background: var(--qw-background, Canvas);
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--qw-border);
+}
+
+.qw-history td {
+  padding: 1px 6px;
+  border-bottom: 1px solid var(--qw-border);
+  vertical-align: middle;
+}
+
+.qw-history .qw-other td {
+  opacity: 0.55;
+}
+
+.qw-history .qw-pick {
+  width: 1.5em;
+  text-align: center;
+}
+
+.qw-history .qw-id,
+.qw-history .qw-time,
+.qw-history .qw-count {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.qw-history .qw-path,
+.qw-history .qw-value,
+.qw-history .qw-snippet {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.qw-history .qw-value {
+  white-space: nowrap;
+}
+
+.qw-history .qw-head {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 8px;
+  border: 1px solid var(--qw-accent);
+  color: var(--qw-accent);
+}
+
+.qw-history .qw-toolbar {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.qw-history .qw-button {
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 1px solid var(--qw-border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.qw-history .qw-button:hover:not(:disabled) {
+  color: var(--qw-accent);
+  border-color: var(--qw-accent);
+}
+
+.qw-history .qw-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.qw-history .qw-error {
+  color: #d00;
+  margin: 4px 0;
+}
+
+.qw-history .qw-snippet {
+  display: block;
+  margin: 4px 0;
+}
+
+.qw-history .qw-empty {
+  margin: 6px 0;
+  opacity: 0.7;
+}

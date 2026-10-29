@@ -20,6 +20,7 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from functools import partial
+from pathlib import Path
 from typing import Any
 
 from qibocal import Executor as QibocalExecutor
@@ -30,6 +31,7 @@ from qibocal.auto.task import Targets
 from . import progress
 from .completed import Completed, convert
 from .frontend import Frontend
+from .history import EDIT, UPDATE, PlatformHistory
 from .middleware import Middleware
 from .output import REPORTS_DIR, default_path
 from .pending import ACQUIRING, PROCESSING, Pending
@@ -38,9 +40,14 @@ from .remote.worker import parameters_document
 from .runner import Local, Runner
 from .session import Session
 from .state import PlatformState
-from .updates import Updates
+from .updates import Updates, _key
 
 __all__ = ["Executor"]
+
+
+def _jsonable(targets: list) -> list:
+    """Targets as JSON values: pairs as lists."""
+    return [list(t) if isinstance(t, tuple) else t for t in targets]
 
 
 def _check(items: Iterable[Any], kind: type, role: str) -> list:
@@ -123,6 +130,9 @@ class Executor(QibocalExecutor):
         self.frontends: list[Frontend] = _check(frontends, Frontend, "frontends")
         if session is not None and session.started and restore_platform:
             session.restore(self)
+        self.history = PlatformHistory.load(self)
+        """The platform states of the session, as diffs: compared, and restored
+        (see :class:`PlatformHistory`)."""
 
     @classmethod
     def create(
@@ -238,6 +248,7 @@ class Executor(QibocalExecutor):
         self.session = Session(path, meta)
         self.path = self.session.path
         self.meta = meta
+        self.history = PlatformHistory(self)
         return self.session
 
     @property
@@ -258,11 +269,22 @@ class Executor(QibocalExecutor):
             ),
         )
 
-    def _set_platform_state(self, state) -> None:
+    def _set_platform_state(
+        self,
+        state,
+        *,
+        kind: str = EDIT,
+        parent: int | None = None,
+        **origin: Any,
+    ) -> None:
+        before = self.runner.platform_state(self)
         self.runner.set_platform_state(self, state)
         if self.session is not None:
             with self._records:
                 self.session.platform(self)
+        self.history._record(
+            kind, before, self.runner.platform_state(self), parent=parent, **origin
+        )
 
     def note(
         self,
@@ -434,6 +456,11 @@ class Executor(QibocalExecutor):
     def _reload(self, folder) -> Completed:
         """A recorded execution, loaded and reported again."""
         completed = self.load(folder)
+        if completed.updates is not None:
+            # its update, if applied at the time
+            completed.updates.applied.update(
+                _key(target) for target in self.history.applied(Path(folder).name)
+            )
         protocol = completed.bound.protocol
         if completed.results is not None and protocol.report is not None:
             completed = self.report(completed)
@@ -519,6 +546,7 @@ class Executor(QibocalExecutor):
             with self._records:
                 self.session.start(self, force)
             self.meta = self.session.meta
+            self.history._flush()
         self._chain("open")
 
     def close(self):
@@ -549,9 +577,17 @@ class Executor(QibocalExecutor):
     def update(
         self, completed: QibocalCompleted, *, targets: Targets | None = None
     ) -> Completed:
+        before = self.runner.platform_state(self)
         updated = self._record(self._chain("update", completed, targets=targets))
         if self.session is not None:
             self.session.platform(self)
+        self.history._record(
+            UPDATE,
+            before,
+            self.runner.platform_state(self),
+            task=Path(updated.path).name if updated.path is not None else None,
+            targets=_jsonable(list(completed.targets) if targets is None else targets),
+        )
         updates = getattr(completed, "updates", None)
         if updates is not None:
             updates._mark(targets)

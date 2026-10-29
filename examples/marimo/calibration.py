@@ -183,6 +183,23 @@ def _(executor, rabi, start):
 @app.cell(hide_code=True)
 def _():
     mo.md("""
+    Every change of the platform state is recorded in the history of the
+    session: compare any two entries (A and B), and restore one, entirely or
+    for the selected paths.
+    """)
+    return
+
+
+@app.cell
+def _(executor, rabi):
+    assert rabi is not None
+    executor.history.explore()
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md("""
     ## 4. Exploring and editing the platform state
 
     The explorer shows parameters and calibration by path, highlighting the
