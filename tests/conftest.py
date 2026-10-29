@@ -51,3 +51,14 @@ def single(executor, bound):
 def acquired(executor, bound):
     """An execution stopped after acquisition."""
     return executor.acquire(bound)
+
+
+def find_widget(widget, kind):
+    """The first widget of a type in a widget tree (e.g. the result tabs)."""
+    if isinstance(widget, kind):
+        return widget
+    for child in getattr(widget, "children", ()):
+        found = find_widget(child, kind)
+        if found is not None:
+            return found
+    return None

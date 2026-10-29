@@ -38,6 +38,7 @@ from .remote.worker import parameters_document
 from .runner import Local, Runner
 from .session import Session
 from .state import PlatformState
+from .updates import Updates
 
 __all__ = ["Executor"]
 
@@ -499,6 +500,11 @@ class Executor(QibocalExecutor):
     def _finish(self, completed: QibocalCompleted) -> Completed:
         """Transform and display a step output."""
         result = convert(completed)
+        # shared by the steps of an execution, following its latest output
+        if result.updates is None:
+            result.updates = Updates(self, result)
+        else:
+            result.updates.completed = result
         for middleware in self.middleware:
             result = convert(middleware.result(self, result))
         for frontend in self.frontends:
@@ -543,6 +549,9 @@ class Executor(QibocalExecutor):
         updated = self._record(self._chain("update", completed, targets=targets))
         if self.session is not None:
             self.session.platform(self)
+        updates = getattr(completed, "updates", None)
+        if updates is not None:
+            updates._mark(targets)
         return self._finish(updated)
 
     def load(self, path: Any) -> Completed:

@@ -222,6 +222,34 @@ Examples
 Two complete notebooks, for Marimo and Jupyter, tour all the features on a
 simulated platform: see :doc:`../examples`, with their executed outputs.
 
+Approving updates
+-----------------
+
+``update=True``, Qibocal's default, applies the platform update of every fitted
+execution right away. Interactively, the fit is usually validated first, by
+looking at the plots: with ``update=False``, executions offer the update
+instead.
+
+.. code-block:: python
+
+    executor = Executor.create(platform="chip", targets=[0, 1], update=False,
+                               frontends=[Marimo()])
+    rabi = executor(protocols.rabi_amplitude_signal(...))
+    rabi  # with "Update all targets" above the reports, "Update" in each one
+
+    rabi.update()  # all targets
+    rabi.update([0])  # some; those already applied are skipped
+
+Buttons and code are equivalent: an applied update shows as "✓ Applied", also
+when applied from code or automatically, and failures offer to retry. The
+returned list holds the targets applied now. Protocols whose update does not
+take a target apply it to all targets at once. Pending executions offer the
+same, once completed (``pending.update()``). With a remote runner and no local
+platform, an update is a short job on the access node (see :doc:`remote`).
+
+An update applies the values fitted from the acquisition: approved later, it
+overwrites any change made in between to the same parameters.
+
 Background execution
 --------------------
 

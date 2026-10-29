@@ -6,19 +6,23 @@ Jupyter renderers of pandas and Plotly.
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
 import ipywidgets as widgets
 from IPython.display import display as ipy_display
 from qibocal.auto.task import Completed as QibocalCompleted
 
 from . import layout
-from .button import again_button, run_button
+from .button import again_button, run_button, update_button
 from .completed import MIMEBUNDLE, Completed
 from .data import data_frames
 from .frontend import Frontend
 from .pending import DONE, FAILED, READY, Pending
 from .reports import Report, reports, reports_of
+
+if TYPE_CHECKING:
+    from .updates import Updates
 
 __all__ = [
     "Jupyter",
@@ -80,10 +84,10 @@ def _fit_results(table: str) -> widgets.Accordion:
     return _accordion({layout.FIT_RESULTS: centered})
 
 
-def _report_item(report: Report) -> widgets.Widget:
+def _report_item(report: Report, update: Any = None) -> widgets.Widget:
     objects: list[Any] = list(report.figures)
     objects.extend(str(extra) for extra in report.extra)
-    children: list[widgets.Widget] = []
+    children: list[widgets.Widget] = [] if update is None else [update]
     if report.table:
         # folded by default, so that only the plots are visible at first
         children.append(_fit_results(report.table))
@@ -94,20 +98,30 @@ def _report_item(report: Report) -> widgets.Widget:
     return widgets.VBox(children)
 
 
-def show_reports(reports_: Any) -> widgets.Widget:
+def show_reports(reports_: Any, updates: Updates | None = None) -> widgets.Widget:
     """Accordion of reports (figures and fit tables), one entry per target.
 
     Args:
         reports_: the ``reports`` attribute of an execution, or the execution
             itself.
+        updates: the platform update of the execution, if any: each target
+            gets an *Update* button, when the update applies per target.
     """
+    if updates is None and isinstance(reports_, Completed):
+        updates = reports_.updates
     items = (
         reports(reports_)
         if isinstance(reports_, QibocalCompleted)
         else reports_of(reports_)
     )
+    per_target = updates is not None and updates.available and updates.per_target
     outputs = {
-        layout.report_title(target): _report_item(report)
+        layout.report_title(target): _report_item(
+            report,
+            update_button(updates, target)
+            if per_target and target is not None
+            else None,
+        )
         for target, report in items.items()
     }
     if not outputs:
@@ -115,8 +129,25 @@ def show_reports(reports_: Any) -> widgets.Widget:
     return _accordion(outputs, expanded=layout.expanded(outputs))
 
 
-def display(completed: QibocalCompleted) -> widgets.Widget:
-    """Full rendering of an execution: data and, when available, reports."""
+def display(
+    completed: QibocalCompleted, actions: Sequence[widgets.Widget] = ()
+) -> widgets.Widget:
+    """Full rendering of an execution: data and, when available, reports.
+
+    Above them, buttons: the given ``actions``, and the platform update of a
+    fitted execution, if not applied automatically (see ``Completed.update``).
+    """
+    updates = getattr(completed, "updates", None)
+    buttons = list(actions)
+    if updates is not None and updates.available:
+        buttons.append(update_button(updates))
+    body = _body(completed, updates)
+    if not buttons:
+        return body
+    return widgets.VBox([widgets.HBox(buttons), body])
+
+
+def _body(completed: QibocalCompleted, updates: Updates | None) -> widgets.Widget:
     sections: dict[str, widgets.Widget] = {}
     try:
         sections[layout.DATA] = show_data(completed.data)
@@ -124,7 +155,7 @@ def display(completed: QibocalCompleted) -> widgets.Widget:
         # no acquisition data (e.g. not yet loaded, or acquisition failed)
         pass
     if completed.reports is not None:
-        sections[layout.REPORTS] = show_reports(completed.reports)
+        sections[layout.REPORTS] = show_reports(completed.reports, updates)
     if completed.error is not None:
         sections[layout.ERROR] = widgets.HTML(
             f"<pre style='color: var(--jp-error-color1, red)'>{completed.error!r}</pre>"
@@ -164,7 +195,9 @@ class Jupyter(Frontend):
 
         def show(pending: Pending) -> None:
             if pending.status == DONE:
-                box.children = [again_button(pending), display(pending.result())]
+                box.children = [
+                    display(pending.result(), actions=[again_button(pending)])
+                ]
             elif pending.status == FAILED:
                 box.children = [
                     again_button(pending),

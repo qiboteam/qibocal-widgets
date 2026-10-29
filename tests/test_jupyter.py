@@ -35,7 +35,11 @@ def test_display_protocol(widget_executor, bound):
     bundle = completed._repr_mimebundle_()
     assert "application/vnd.jupyter.widget-view+json" in bundle
 
-    widget = display(completed)
+    view = display(completed)
+    assert isinstance(view, widgets.VBox)
+    buttons, widget = view.children
+    # update=False: offered, to apply after looking at the fit
+    assert [b.label for b in buttons.children] == ["⤓ Update all targets"]
     assert isinstance(widget, widgets.Tab)
     assert titles(widget) == ["Data", "Reports"]
     data, reports = widget.children
@@ -54,7 +58,7 @@ def test_mimebundle_renders_display(widget_executor, bound, monkeypatch):
     monkeypatch.setitem(completed.views, "_repr_mimebundle_", spy)
     bundle = completed._repr_mimebundle_()
     (widget,) = shown
-    assert isinstance(widget, widgets.Tab)
+    assert isinstance(widget, widgets.VBox)
     assert bundle["application/vnd.jupyter.widget-view+json"]["model_id"] == (
         widget.model_id
     )

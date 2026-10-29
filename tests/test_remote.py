@@ -349,6 +349,20 @@ def test_remote_update_state(bound, cluster, mock_frequency):
     assert again.data.scale == {0: peak * 1e9}
 
 
+def test_remote_update_approved(bound, cluster, mock_frequency):
+    """Approved later, the update runs remotely, as when automatic."""
+    remote = Remote(ssh="me@login", queue="chip", platform="mock")
+    executor = Executor(None, targets=TARGETS, update=False, runner=remote)
+    completed = executor(bound)
+    assert [call["tool"] for call in cluster()] == ["ssh", "srun"]
+    assert completed.update([1]) == [1]
+    assert [call["tool"] for call in cluster()][-1] == "ssh"
+    drives = {t: create_calibration_platform("mock").qubits[t].drive for t in TARGETS}
+    configs = json.loads(remote.state["parameters"])["configs"]
+    assert configs[drives[1]]["frequency"] == completed.results.peak[1] * 1e9
+    assert configs[drives[0]]["frequency"] == mock_frequency[0]  # not approved
+
+
 def test_access_tier_local_update(bound, cluster, mock_frequency, monkeypatch):
     """With a local platform, updates are local and its state travels."""
     monkeypatch.setenv("QIBOLAB_PLATFORMS", str(PLATFORMS))

@@ -123,6 +123,17 @@ class Pending:
         self._notify()
         self._dispatch()
 
+    def update(self, targets: Any = None) -> list:
+        """Apply the platform update of the completed execution, as
+        :meth:`Completed.update <qibocal_widgets.Completed.update>`.
+
+        Raises:
+            ValueError: if not completed successfully.
+        """
+        if self._status != DONE:
+            raise ValueError(f"{self.name} is {self._status}: nothing to update yet")
+        return self.result().update(targets)
+
     def rerun(self) -> None:
         """Run a completed execution again, as its *Run again* button does.
 

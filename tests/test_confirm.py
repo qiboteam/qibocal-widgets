@@ -4,7 +4,7 @@ import threading
 import time
 
 import pytest
-from conftest import PLATFORMS, TARGETS
+from conftest import PLATFORMS, TARGETS, find_widget
 from fake import fake
 from qibocal import Executor as QibocalExecutor
 
@@ -209,7 +209,7 @@ def test_jupyter_run_button(monkeypatch):
     assert button.tooltip == "fake(nshots=10)"
     button.click()
     pending.result(10)
-    wait_for(lambda: isinstance(box.children[-1], widgets.Tab))  # the result
+    wait_for(lambda: find_widget(box, widgets.Tab) is not None)  # the result
 
 
 def test_jupyter_confirmable_in_kernel_only():
@@ -305,9 +305,10 @@ def test_jupyter_run_again():
     pending = executor.submit(fake(npoints=3))
     pending.result(10)
     box = pending.views["_repr_mimebundle_"](pending)
-    again, result = box.children
+    ((buttons, result),) = (view.children for view in box.children)
+    again = buttons.children[0]
     assert isinstance(again, Button) and again.label == "↻ Run again"
     assert isinstance(result, widgets.Tab)
     again.click()
     wait_for(lambda: runner.count == 2 and pending.status == "done")
-    wait_for(lambda: isinstance(box.children[-1], widgets.Tab))
+    wait_for(lambda: find_widget(box, widgets.Tab) is not None)

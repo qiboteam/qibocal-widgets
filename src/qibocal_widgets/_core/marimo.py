@@ -4,19 +4,23 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
 import marimo as mo
 from marimo._runtime.state import State
 from qibocal.auto.task import Completed as QibocalCompleted
 
 from . import layout
-from .button import again_button, run_button
+from .button import again_button, run_button, update_button
 from .completed import MARIMO, Completed
 from .data import data_frames
 from .frontend import Frontend
 from .pending import DONE, FAILED, READY, Pending
 from .reports import Report, reports, reports_of
+
+if TYPE_CHECKING:
+    from .updates import Updates
 
 __all__ = [
     "Marimo",
@@ -45,8 +49,10 @@ def show_data(data: Any) -> mo.Html:
     return mo.accordion(tables, expanded=layout.expanded(tables))
 
 
-def _report_item(report: Report) -> mo.Html:
+def _report_item(report: Report, update: Any = None) -> mo.Html:
     items: list[Any] = []
+    if update is not None:
+        items.append(mo.ui.anywidget(update))
     if report.table:
         # folded by default, so that only the plots are visible at first
         items.append(
@@ -59,20 +65,30 @@ def _report_item(report: Report) -> mo.Html:
     return mo.vstack(items)
 
 
-def show_reports(reports_: Any) -> mo.Html:
+def show_reports(reports_: Any, updates: Updates | None = None) -> mo.Html:
     """Accordion of reports (figures and fit tables), one entry per target.
 
     Args:
         reports_: the ``reports`` attribute of an execution, or the execution
             itself.
+        updates: the platform update of the execution, if any: each target
+            gets an *Update* button, when the update applies per target.
     """
+    if updates is None and isinstance(reports_, Completed):
+        updates = reports_.updates
     items = (
         reports(reports_)
         if isinstance(reports_, QibocalCompleted)
         else reports_of(reports_)
     )
+    per_target = updates is not None and updates.available and updates.per_target
     outputs = {
-        layout.report_title(target): _report_item(report)
+        layout.report_title(target): _report_item(
+            report,
+            update_button(updates, target)
+            if per_target and target is not None
+            else None,
+        )
         for target, report in items.items()
     }
     if not outputs:
@@ -80,8 +96,24 @@ def show_reports(reports_: Any) -> mo.Html:
     return mo.accordion(outputs, expanded=layout.expanded(outputs))
 
 
-def display(completed: QibocalCompleted) -> mo.Html:
-    """Full rendering of an execution: data and, when available, reports."""
+def display(completed: QibocalCompleted, actions: Sequence[Any] = ()) -> mo.Html:
+    """Full rendering of an execution: data and, when available, reports.
+
+    Above them, buttons: the given ``actions``, and the platform update of a
+    fitted execution, if not applied automatically (see ``Completed.update``).
+    """
+    updates = getattr(completed, "updates", None)
+    buttons = list(actions)
+    if updates is not None and updates.available:
+        buttons.append(update_button(updates))
+    body = _body(completed, updates)
+    if not buttons:
+        return body
+    row = mo.hstack([mo.ui.anywidget(button) for button in buttons], justify="start")
+    return mo.vstack([row, body])
+
+
+def _body(completed: QibocalCompleted, updates: Updates | None) -> mo.Html:
     sections: dict[str, Any] = {}
     try:
         sections[layout.DATA] = show_data(completed.data)
@@ -89,7 +121,7 @@ def display(completed: QibocalCompleted) -> mo.Html:
         # no acquisition data (e.g. not yet loaded, or acquisition failed)
         pass
     if completed.reports is not None:
-        sections[layout.REPORTS] = show_reports(completed.reports)
+        sections[layout.REPORTS] = show_reports(completed.reports, updates)
     if completed.error is not None:
         sections[layout.ERROR] = mo.callout(
             mo.plain_text(repr(completed.error)), kind="danger"
@@ -160,8 +192,7 @@ class Marimo(Frontend):
                 shown = _RENDERED[cell] = (run, set(), time.monotonic())
             shown[1].add(id(pending))
         if pending.status == DONE:
-            again = mo.ui.anywidget(again_button(pending))
-            return mo.vstack([again, display(pending.result())])
+            return display(pending.result(), actions=[again_button(pending)])
         if pending.status == FAILED:
             again = mo.ui.anywidget(again_button(pending))
             error = mo.callout(mo.md(f"**{pending.describe()}**"), kind="danger")

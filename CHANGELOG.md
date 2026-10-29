@@ -22,6 +22,10 @@ First development version, targeting the executor interface of Qibocal's
   workers, and turn the spinner of a pending execution into a progress bar,
   restarting on each refined estimate, with the first one for comparison, and
   the batches done, when the driver estimates them (`Pending.estimates`).
+- Approving platform updates after validating the fit, with `update=False`:
+  `completed.update()` and `pending.update()`, for all targets or some, and
+  *Update* buttons (all targets, and per target in each report), showing when
+  applied.
 - `confirm`: executions wait for confirmation, displayed as a *Run* button
   (`pending.start()` from code), so that notebooks start nothing by
   themselves; only where a frontend can show it, at once elsewhere.

@@ -8,15 +8,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import anywidget
 import traitlets
 
 if TYPE_CHECKING:
     from ..pending import Pending
+    from ..updates import Updates
 
-__all__ = ["Button", "again_button", "run_button"]
+__all__ = ["Button", "again_button", "run_button", "update_button"]
+
+ALL = object()
+"""All the targets of an update."""
 
 HERE = Path(__file__).parent
 
@@ -64,3 +68,42 @@ def run_button(pending: Pending) -> Button:
 def again_button(pending: Pending) -> Button:
     """The *Run again* button of a completed execution."""
     return Button("↻ Run again", pending.rerun, tooltip(pending))
+
+
+def update_button(updates: Updates, target: Any = ALL) -> Button:
+    """A button applying the platform update, to all targets or to one.
+
+    It shows when applied (also by other buttons, from code, or automatically),
+    and offers to retry on failure.
+    """
+    whole = target is ALL
+    if whole and updates.per_target:
+        labels = ("⤓ Update all targets", "✓ All applied")
+        tooltip_ = "Apply the fitted values of all targets to the platform"
+    else:
+        labels = ("⤓ Update", "✓ Applied")
+        tooltip_ = "Apply the fitted values to the platform"
+
+    def applied() -> bool:
+        return not updates.pending if whole else updates.is_applied(target)
+
+    def show(_: Any = None) -> None:
+        done = applied()
+        button.label = labels[done]
+        button.disabled = done
+
+    def click() -> None:
+        button.label = "Updating…"
+        try:
+            updates.apply(None if whole else [target])
+        except Exception as error:  # noqa: BLE001 - shown, to retry
+            button.label = "⚠ Update failed: retry"
+            button.tooltip = f"{type(error).__name__}: {error}"
+            button.disabled = False
+        else:
+            show()
+
+    button = Button(labels[0], click, tooltip_)
+    show()
+    updates.on_change(show)
+    return button

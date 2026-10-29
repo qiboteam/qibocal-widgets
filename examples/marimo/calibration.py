@@ -85,7 +85,7 @@ def _():
         path=path,
         platform=qutrits(),
         targets=[0, 1],
-        update=True,
+        update=False,
         frontends=[Marimo()],
     )
     executor.path
@@ -147,9 +147,12 @@ def _():
     mo.md("""
     ## 3. Updating the platform
 
-    A full execution (`executor(bound)`) acquires, fits, reports, and, with
-    the executor's `update=True`, updates the platform. A snapshot of the platform state
-    taken before shows what changed.
+    A full execution (`executor(bound)`) acquires, fits, and reports. The
+    executor is created with `update=False`: the platform is updated once the
+    fit is validated, with the *Update* buttons above the reports (all targets,
+    or per target, inside each report), or from code with `rabi.update()`.
+    (With `update=True`, it is updated right away, and the buttons show it.)
+    A snapshot of the platform state taken before shows what changed.
     """)
     return
 
@@ -172,7 +175,7 @@ def _(executor, ramsey):
 
 @app.cell
 def _(executor, rabi, start):
-    assert rabi is not None
+    rabi.update([0])  # the fit of target 0 looks right: approve it alone
     executor.platform_state.diff(start)
     return
 
