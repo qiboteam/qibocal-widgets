@@ -8,6 +8,7 @@ environment delegation) is exercised for real.
 import ast
 import json
 import os
+import shutil
 import stat
 import sys
 from pathlib import Path
@@ -639,3 +640,22 @@ def test_estimates_streamed(cluster, monkeypatch):
     pending.result(60)
     assert [e.seconds for e in pending.estimates] == list(ESTIMATES)
     assert [e.kind for e in pending.estimates] == ["execution", "batch"]
+
+
+def test_save_remote(cluster, tmp_path, bound):
+    """Without a local platform, the state is written on the remote machine."""
+    folder = tmp_path / "remote-platforms"
+    shutil.copytree(PLATFORMS, folder)
+    remote = Remote(
+        ssh="me@login", queue="chip", platform="mock", platforms_dir=str(folder)
+    )
+    executor = Executor(None, targets=TARGETS, update=True, runner=remote)
+    completed = executor(bound)
+    path = executor.platform_state.save(overwrite=True)
+    assert path == str(folder / "mock")
+    assert [call["tool"] for call in cluster()][-1] == "ssh"  # not queued
+    parameters = json.loads((folder / "mock" / "parameters.json").read_text())
+    drive = create_calibration_platform("mock").qubits[0].drive
+    assert parameters["configs"][drive]["frequency"] == completed.results.peak[0] * 1e9
+    with pytest.raises(RemoteError, match="overwrite=True"):
+        executor.platform_state.save()

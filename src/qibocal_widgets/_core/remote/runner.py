@@ -170,6 +170,22 @@ class Remote(Runner):
             # the remote platform state, sent along with every acquisition
             self.state = state
 
+    def save_platform(
+        self, executor: Executor, state: dict, overwrite: bool = False
+    ) -> str:
+        """Write a state in the platform folder: on the remote machine, without a
+        local platform (in ``platforms_dir``, if configured), outside of the
+        queue."""
+        if not self.connection.dispatched or executor.platform is not None:
+            return super().save_platform(executor, state, overwrite)
+        job = {
+            "action": "save",
+            "platform": self._platform(executor),
+            "state": state,
+            "overwrite": overwrite,
+        }
+        return transport.run(self.connection, job, compute=False)["path"]
+
     def open(self, executor: Executor) -> None:
         if not self.connection.dispatched:
             return super().open(executor)

@@ -11,7 +11,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-__all__ = ["CALIBRATION", "PARAMETERS", "State", "apply", "read", "state", "write"]
+__all__ = [
+    "CALIBRATION",
+    "PARAMETERS",
+    "State",
+    "apply",
+    "export",
+    "read",
+    "state",
+    "write",
+]
 
 PARAMETERS = "parameters.json"
 """Platform parameters file, in platform dumps."""
@@ -63,3 +72,18 @@ def read(folder: Path) -> State | None:
         "parameters": (folder / PARAMETERS).read_text(),
         "calibration": calibration.read_text() if calibration.is_file() else None,
     }
+
+
+def export(state: State, folder: Path, overwrite: bool = False) -> Path:
+    """Write a state in a platform folder, formatted as qibolab dumps it.
+
+    Existing files are replaced only in a git working tree, or with
+    ``overwrite``.
+
+    Raises:
+        FileExistsError: replacing files outside of a git working tree, without
+            ``overwrite``.
+    """
+    from .remote.worker import export_state
+
+    return Path(export_state(state, Path(folder), overwrite))

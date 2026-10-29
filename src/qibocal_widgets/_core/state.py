@@ -172,6 +172,8 @@ class PlatformState:
         sink: applies an updated state; ``None`` for read-only states.
         name: how the state is referred to in code, in the snippets shown by
             the explorer.
+        saver: writes a state in the platform folder, given ``overwrite``,
+            returning where (see :meth:`save`); ``None`` if not known.
     """
 
     def __init__(
@@ -180,9 +182,11 @@ class PlatformState:
         sink: Callable[[platforms.State], None] | None = None,
         *,
         name: str = "state",
+        saver: Callable[[platforms.State, bool], str] | None = None,
     ):
         self._source = source
         self._sink = sink
+        self._saver = saver
         self.name = name
 
     # -- constructors ----------------------------------------------------------
@@ -190,10 +194,18 @@ class PlatformState:
     @classmethod
     def of(cls, platform: Any, *, name: str = "state") -> PlatformState:
         """The state of a platform object, bound to it."""
+
+        def save(state: platforms.State, overwrite: bool) -> str:
+            from qibolab import locate_platform
+
+            folder = locate_platform(platform.name)
+            return str(platforms.export(state, folder, overwrite))
+
         return cls(
             lambda: platforms.state(platform),
             lambda state: platforms.apply(platform, state),
             name=name,
+            saver=save,
         )
 
     @classmethod
@@ -218,6 +230,33 @@ class PlatformState:
         if state is None:
             raise FileNotFoundError(f"No platform state in {path}")
         return cls.frozen(state, name=name)
+
+    def save(self, path: str | Path | None = None, *, overwrite: bool = False) -> str:
+        """Write the state as a platform folder: ``parameters.json`` and
+        ``calibration.json``, formatted as qibolab dumps them.
+
+        Args:
+            path: the folder; by default, the folder of the platform, e.g. in
+                ``QIBOLAB_PLATFORMS``, on the remote machine for remote
+                runners without a local platform.
+            overwrite: replace existing files outside of a git working tree.
+                In a git working tree, they are always replaced: git keeps the
+                previous version, and the changes are reviewed and committed
+                there (e.g. with Qibocamp).
+
+        Returns:
+            The folder written, on the machine where it is.
+
+        Raises:
+            ValueError: without a path, when the platform folder is not known.
+            FileExistsError: replacing files outside of a git working tree,
+                without ``overwrite``.
+        """
+        if path is not None:
+            return str(platforms.export(self.state(), Path(path), overwrite))
+        if self._saver is None:
+            raise ValueError("The platform folder is not known: give a path")
+        return self._saver(self.state(), overwrite)
 
     @classmethod
     def frozen(cls, state: platforms.State, *, name: str = "state") -> PlatformState:

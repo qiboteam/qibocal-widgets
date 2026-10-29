@@ -22,6 +22,10 @@ First development version, targeting the executor interface of Qibocal's
   workers, and turn the spinner of a pending execution into a progress bar,
   restarting on each refined estimate, with the first one for comparison, and
   the batches done, when the driver estimates them (`Pending.estimates`).
+- `PlatformState.save()`: the state written back to the platform folder (on
+  the remote machine, for remote runners without a local platform), or to any
+  folder, formatted as qibolab dumps it; files are replaced in git working
+  trees, or with `overwrite=True`.
 - Approving platform updates after validating the fit, with `update=False`:
   `completed.update()` and `pending.update()`, for all targets or some, and
   *Update* buttons (all targets, and per target in each report), showing when

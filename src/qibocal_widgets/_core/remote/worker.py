@@ -352,6 +352,61 @@ def acquire(job: dict) -> dict:
     }
 
 
+def under_git(folder: Path) -> bool:
+    """Whether a folder is in a git working tree (``git`` being available)."""
+    try:
+        process = subprocess.run(
+            ["git", "-C", str(folder), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return process.returncode == 0 and process.stdout.strip() == "true"
+
+
+def export_state(state: dict, folder: Path, overwrite: bool = False) -> str:
+    """Write a platform state in a folder, as qibolab and Qibocal dump it.
+
+    The JSON documents are indented as their own dumps, so that the changes
+    of a platform folder under version control are only the changed values.
+    Existing files are replaced only in a git working tree, where the previous
+    version is kept, or when ``overwrite`` is set.
+
+    Raises:
+        FileExistsError: replacing files outside of a git working tree, without
+            ``overwrite``.
+    """
+    names = {"parameters": "parameters.json", "calibration": "calibration.json"}
+    folder.mkdir(parents=True, exist_ok=True)
+    existing = [
+        name
+        for key, name in names.items()
+        if state.get(key) is not None and (folder / name).exists()
+    ]
+    if existing and not overwrite and not under_git(folder):
+        raise FileExistsError(
+            f"{folder} is not under version control: pass overwrite=True to "
+            f"replace {', '.join(existing)}"
+        )
+    for key, name in names.items():
+        if state.get(key) is not None:
+            document = json.loads(state[key])
+            (folder / name).write_text(
+                json.dumps(document, indent=4, ensure_ascii=False), encoding="utf-8"
+            )
+    return str(folder)
+
+
+def save(job: dict) -> dict:
+    """Write the platform state in the platform folder, on this machine."""
+    from qibolab import locate_platform
+
+    folder = locate_platform(job["platform"])
+    return {"path": export_state(job["state"], folder, job.get("overwrite", False))}
+
+
 def update(job: dict) -> dict:
     """Apply fit results to the platform, returning its new state."""
     from qibocal import Executor
@@ -373,7 +428,7 @@ def describe(job: dict) -> dict:
     return {"state": state(platform(job))}
 
 
-ACTIONS = {"acquire": acquire, "update": update, "describe": describe}
+ACTIONS = {"acquire": acquire, "update": update, "describe": describe, "save": save}
 
 
 # -- entry point ---------------------------------------------------------------

@@ -62,6 +62,25 @@ class Runner:
         if executor.platform is not None:
             platforms.apply(executor.platform, state)
 
+    def save_platform(
+        self, executor: Executor, state: platforms.State, overwrite: bool = False
+    ) -> str:
+        """Write a calibration state in the folder of the platform.
+
+        Returns:
+            The folder written, on the machine of the platform.
+
+        Raises:
+            ValueError: without a platform.
+            FileExistsError: see :func:`platforms.export`.
+        """
+        if executor.platform is None:
+            raise ValueError("No platform, hence no platform folder: give a path")
+        from qibolab import locate_platform
+
+        folder = locate_platform(executor.platform.name)
+        return str(platforms.export(state, folder, overwrite))
+
     def acquire(
         self, executor: Executor, bound: BoundProtocol, **kwargs: Any
     ) -> Completed:

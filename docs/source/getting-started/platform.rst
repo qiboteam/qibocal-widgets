@@ -88,6 +88,30 @@ respect to another state:
     start = PlatformState.load(executor.path / "platform")
     executor.platform_state.diff(start)  # {path: (before, now)}
 
+Saving
+------
+
+:meth:`~qibocal_widgets.PlatformState.save` writes a state as a platform
+folder (``parameters.json`` and ``calibration.json``), by default the folder of
+the platform itself, so that the calibration outlives the session:
+
+.. code-block:: python
+
+    executor.platform_state.save()  # back to the platform folder
+    executor.platform_state.save("chip-2026-10-29")  # elsewhere
+    snapshot.save("before")  # any state, e.g. a snapshot
+
+- The files are formatted as qibolab and Qibocal dump them, so that the
+  changes of a platform folder are only the values that changed.
+- Existing files are replaced in a git working tree, where git keeps the
+  previous version, and the change is reviewed and committed there, e.g. with
+  Qibocamp, which versions platform folders (one branch per calibration
+  procedure). Elsewhere, replacing them requires ``overwrite=True``.
+- With a :class:`~qibocal_widgets.remote.Remote` runner and no local platform,
+  the platform folder is the one on the remote machine (in ``platforms_dir``,
+  if configured): the state is written there, by a short job outside of the
+  queue.
+
 Explorer
 --------
 

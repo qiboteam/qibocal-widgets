@@ -253,6 +253,9 @@ class Executor(QibocalExecutor):
             lambda: self.runner.platform_state(self),
             self._set_platform_state,
             name="executor.platform_state",
+            saver=lambda state, overwrite: self.runner.save_platform(
+                self, state, overwrite
+            ),
         )
 
     def _set_platform_state(self, state) -> None:
