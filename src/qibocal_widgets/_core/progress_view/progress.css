@@ -40,7 +40,7 @@
 
 .qw-progress .qw-clock {
   margin-left: auto;
-  font-variant-numeric: tabular-nums;
+  min-width: 7ch;
   opacity: 0.7;
 }
 
@@ -70,30 +70,47 @@
 
 .qw-progress .qw-grid {
   display: grid;
-  grid-template-columns: max-content 1fr max-content;
+  grid-template-columns: max-content 1fr max-content max-content max-content;
   align-items: center;
-  gap: 0.35em 0.75em;
+  gap: 0.35em 0.6em;
   margin-top: 0.5em;
-}
-
-.qw-progress .qw-grid.qw-single {
-  grid-template-columns: 1fr;
 }
 
 .qw-progress .qw-label {
   white-space: nowrap;
+  min-width: 6.5em;
 }
 
-.qw-progress .qw-detail {
-  margin-left: 0.3em;
+.qw-progress .qw-detail::before {
+  content: " / ?";
   opacity: 0.55;
 }
 
-.qw-progress .qw-timing {
+/* numbers: tabular digits, fixed widths, right-aligned: only values change */
+.qw-progress .qw-number,
+.qw-progress .qw-clock {
   font-variant-numeric: tabular-nums;
+  white-space: pre;
+  text-align: right;
   font-size: 12px;
-  opacity: 0.8;
-  white-space: nowrap;
+}
+
+.qw-progress .qw-grid .qw-number {
+  min-width: 7ch;
+}
+
+.qw-progress .qw-grid .qw-estimate {
+  min-width: 8ch;
+  opacity: 0.7;
+}
+
+.qw-progress .qw-grid .qw-over-by {
+  min-width: 8ch;
+  color: var(--qw-over);
+}
+
+.qw-progress > .qw-body > .qw-track {
+  margin-top: 0.5em;
 }
 
 .qw-progress .qw-track {

@@ -491,3 +491,27 @@ def test_waiting_for_earlier():
     assert "processing, waiting for earlier executions" in second.describe()
     runner.gate(3).set()
     first.result(10), second.result(10)
+
+
+def test_view_follows_in_place(bound):
+    """One view, updated in place until the end: no re-rendering."""
+    pytest.importorskip("anywidget")
+    runner = Gated()
+    executor = Executor(None, targets=TARGETS, update=False, runner=runner)
+    pending = executor.submit(bound)
+    wait_for(lambda: pending.status == "acquiring")
+    calls = []
+    view = ProgressView(pending, schedule=lambda f, *args: (calls.append(f), f(*args)))
+    pending._estimate(5.0)
+    assert view.executions[0]["estimate"] == 5.0
+    clock = view.clock
+    pending._estimate(2.0, "batch")
+    assert view.executions[0]["batches"][0]["estimate"] == 2.0
+    assert view.clock >= clock  # the browser's clock is corrected again
+    runner.gate(bound.parameters.npoints).set()
+    pending.result(10)
+    wait_for(lambda: pending.status == "done")
+    count = len(calls)
+    pending.rerun()  # unsubscribed once ended: the result replaced it
+    pending.result(10)
+    assert len(calls) == count

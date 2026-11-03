@@ -22,7 +22,8 @@ First development version, targeting the executor interface of Qibocal's
   bars for the current `platform.execute()` call and its batch, from the
   estimates logged by qibolab and its drivers (e.g. Qblox), captured locally
   or streamed back by remote workers, with the estimates and measured times
-  of all of them (`Pending.timeline`, `Pending.phase`).
+  of all of them (`Pending.timeline`, `Pending.phase`). The view updates in
+  place, with fixed-width numbers, so that only values change.
 - Executions show a header line: the protocol, how long the acquisition and
   the fit took (and the total, since submitted, for background executions),
   and, on the right, the *Run again* and *Update* buttons; each target's

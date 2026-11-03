@@ -247,8 +247,9 @@ class Jupyter(Frontend):
                 ]
             elif pending.status == READY:
                 box.children = [run_button(pending)]
-            else:
-                box.children = [ProgressView(pending)]
+            elif not (box.children and isinstance(box.children[0], ProgressView)):
+                # following the execution in place, on the kernel's thread
+                box.children = [ProgressView(pending, schedule=_on_kernel)]
 
         show(pending)
         pending.on_change(lambda pending: _on_kernel(show, pending))

@@ -236,7 +236,11 @@ class Marimo(Frontend):
             return mo.vstack([again, error])
         if pending.status == READY:
             return mo.ui.anywidget(run_button(pending))
-        return mo.ui.anywidget(ProgressView(pending))
+        # updating in place, from any thread: marimo binds widgets to their
+        # session when created
+        return mo.ui.anywidget(
+            ProgressView(pending, schedule=lambda function, *args: function(*args))
+        )
 
 
 _RENDERED: dict[str, tuple[object, set[int], float]] = {}
@@ -285,9 +289,9 @@ def _follow(pending: Pending, cell: str, run: object) -> None:
     remove = pending.on_change(lambda _: changed.set())
     if isinstance(pending, MarimoPending):
         pending._follow(+1)
-    # a completed execution is displayed as such: nothing to replace yet
-    state = (pending.status, pending.phase, len(pending.timeline.events), pending._runs)
-    shown = state if pending.status in ENDED else None
+    # the output is replaced when what it shows changes kind: the Run button,
+    # the progress (updating in place), the result; as displayed at first
+    shown = _shown(pending)
     ended = None
     idle = False
     try:
@@ -306,12 +310,7 @@ def _follow(pending: Pending, cell: str, run: object) -> None:
             )
             if alone and (wait := displayed[2] + GRACE - time.monotonic()) > 0:
                 time.sleep(wait)  # until the displayed output has been sent
-            state = (
-                pending.status,
-                pending.phase,
-                len(pending.timeline.events),
-                pending._runs,
-            )
+            state = _shown(pending)
             if alone and state != shown:
                 mo.output.replace(pending._display_())
                 shown = state
@@ -330,6 +329,12 @@ def _follow(pending: Pending, cell: str, run: object) -> None:
             and pending.status != READY
         ):
             pending._run_launcher()
+
+
+def _shown(pending: Pending) -> tuple[str, int]:
+    """What the output of an execution shows: its kind, and which run."""
+    status = pending.status
+    return (status if status in (READY, *ENDED) else "progress", pending._runs)
 
 
 class MarimoPending(Pending, State):

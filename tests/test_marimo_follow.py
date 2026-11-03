@@ -96,21 +96,20 @@ def executor(runner):
     )
 
 
-def test_spinner_replaced(cells):
+def test_progress_in_place(cells):
     runner = Gated()
     pending = executor(runner).submit(fake(npoints=3))
     assert isinstance(pending, frontend.MarimoPending)
-    pending._display_()  # the cell output: the progress
+    view = pending._display_().widget  # the cell output: the progress
+    wait_for(lambda: pending.status == "acquiring")
     pending._estimate(3.0)
-    wait_for(
-        lambda: any(
-            getattr(getattr(obj, "widget", None), "executions", None)
-            for _, obj in cells.outputs
-        )
-    )  # replaced, with the estimate
+    wait_for(lambda: view.executions)  # updated in place
+    assert view.executions[0]["estimate"] == 3.0
+    time.sleep(0.2)
+    assert not cells.outputs  # not replaced: no layout shift
     runner.gate.set()
     pending.result(10)
-    wait_for(lambda: "Target 0" in shown(cells)[-1])  # the result
+    wait_for(lambda: shown(cells) and "Target 0" in shown(cells)[-1])  # the result
 
 
 def test_reused_in_a_later_run(cells):
