@@ -22,6 +22,10 @@ First development version, targeting the executor interface of Qibocal's
   workers, and turn the spinner of a pending execution into a progress bar,
   restarting on each refined estimate, with the first one for comparison, and
   the batches done, when the driver estimates them (`Pending.estimates`).
+- `executor.describe_platform()`: qubits, couplers, channels (kind, port, LO,
+  mixer), and instruments of the platform, also for remote runners without a
+  local platform; `PlatformLayout.lo_config` locates the LO of a channel in
+  the platform state, and `sharing` the channels using it.
 - `executor.history`: the platform states of the session, as diffs, with
   their origin (updates, edits, restores, external changes); compared,
   restored entirely (forking the history) or for some paths, recorded in the

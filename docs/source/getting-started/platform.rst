@@ -88,6 +88,32 @@ respect to another state:
     start = PlatformState.load(executor.path / "platform")
     executor.platform_state.diff(start)  # {path: (before, now)}
 
+Layout
+------
+
+The platform state holds the parameters and the calibration, but not the
+layout of the platform: which channels each qubit has, and how they are wired
+(instruments, ports, local oscillators, mixers), defined by its
+``platform.py``. :meth:`executor.describe_platform()
+<qibocal_widgets.Executor.describe_platform>` returns it, as plain data:
+
+.. code-block:: python
+
+    layout = executor.describe_platform()
+    layout.qubits[0]  # {"drive": "0/drive", "probe": "0/probe", ...}
+    layout.channels["0/drive"]  # {"kind": "IqChannel", "lo": "0/drive_lo", ...}
+    layout.instruments  # {name: {"kind": ..., "address": ...}}
+
+    # the LO of the drive of qubit 0, in the platform state
+    lo = layout.lo_config(layout.qubits[0]["drive"])  # "parameters.configs.0/drive_lo"
+    executor.platform_state[f"{lo}.frequency"] = 5.1e9
+    layout.sharing(lo)  # the channels using the same LO, affected too
+
+With a :class:`~qibocal_widgets.remote.Remote` runner and no local platform,
+the platform is created on the remote machine, without connecting it, by a
+short job outside of the queue, once per runner. Values changed through the
+platform state travel with the next acquisitions, as any other.
+
 History
 -------
 

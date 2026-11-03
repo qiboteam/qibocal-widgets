@@ -660,3 +660,21 @@ def test_save_remote(cluster, tmp_path, bound):
     assert parameters["configs"][drive]["frequency"] == completed.results.peak[0] * 1e9
     with pytest.raises(RemoteError, match="overwrite=True"):
         executor.platform_state.save()
+
+
+def test_describe_platform_remote(cluster, bound):
+    """Without a local platform, the layout comes from the remote machine."""
+    remote = Remote(ssh="me@login", queue="chip", platform="mock")
+    executor = Executor(None, targets=TARGETS, update=False, runner=remote)
+    layout = executor.describe_platform()
+    assert [call["tool"] for call in cluster()] == ["ssh"]  # not queued
+    assert layout.qubits[0]["drive"] == "0/drive"
+    assert layout.channels["0/drive"]["lo"] == "0/drive_lo"
+    assert executor.describe_platform() == layout  # once
+    assert len(cluster()) == 1
+    # changing the drive LO: the new value travels with the next acquisition
+    path = layout.lo_config(layout.qubits[0]["drive"])
+    executor.platform_state[f"{path}.frequency"] = 4.3e9
+    executor.acquire(bound)
+    configs = json.loads(remote.state["parameters"])["configs"]
+    assert configs["0/drive_lo"]["frequency"] == 4.3e9

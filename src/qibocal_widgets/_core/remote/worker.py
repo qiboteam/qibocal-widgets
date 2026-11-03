@@ -423,12 +423,57 @@ def update(job: dict) -> dict:
     return {"state": state(created)}
 
 
+def layout_of(platform) -> dict:
+    """The layout of a platform: qubits, couplers, channels, and instruments.
+
+    Identifiers are kept as given (e.g. integer qubits), as lists of pairs.
+    """
+
+    def kind(obj) -> str:
+        return type(obj).__name__
+
+    def dumped(elements) -> list:
+        return [[name, element.model_dump(mode="json")] for name, element in elements]
+
+    return {
+        "qubits": dumped(platform.qubits.items()),
+        "couplers": dumped(getattr(platform, "couplers", {}).items()),
+        "channels": [
+            [name, {"kind": kind(channel), **channel.model_dump(mode="json")}]
+            for name, channel in platform.channels.items()
+        ],
+        "instruments": [
+            [
+                name,
+                {
+                    "kind": kind(instrument),
+                    "address": getattr(instrument, "address", None),
+                },
+            ]
+            for name, instrument in platform.instruments.items()
+        ],
+    }
+
+
+def layout(job: dict) -> dict:
+    """The layout of the platform, created without connecting it."""
+    from qibocal import create_calibration_platform
+
+    return {"layout": layout_of(create_calibration_platform(job["platform"]))}
+
+
 def describe(job: dict) -> dict:
     """The calibration state of the platform, without connecting it."""
     return {"state": state(platform(job))}
 
 
-ACTIONS = {"acquire": acquire, "update": update, "describe": describe, "save": save}
+ACTIONS = {
+    "acquire": acquire,
+    "update": update,
+    "describe": describe,
+    "layout": layout,
+    "save": save,
+}
 
 
 # -- entry point ---------------------------------------------------------------

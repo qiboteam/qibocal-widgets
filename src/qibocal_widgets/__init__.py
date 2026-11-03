@@ -38,6 +38,7 @@ from ._core.data import data_frames
 from ._core.executor import Executor
 from ._core.frontend import Frontend
 from ._core.history import Entry, PlatformHistory
+from ._core.layout_platform import PlatformLayout
 from ._core.middleware import Middleware
 from ._core.output import reports_dir
 from ._core.pending import Estimate, NotStartedError, Pending
@@ -58,6 +59,7 @@ __all__ = [
     "NotStartedError",
     "Pending",
     "PlatformHistory",
+    "PlatformLayout",
     "PlatformState",
     "ReadOnlyState",
     "Report",

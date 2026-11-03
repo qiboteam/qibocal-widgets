@@ -32,6 +32,7 @@ from . import progress
 from .completed import Completed, convert
 from .frontend import Frontend
 from .history import EDIT, UPDATE, PlatformHistory
+from .layout_platform import PlatformLayout
 from .middleware import Middleware
 from .output import REPORTS_DIR, default_path
 from .pending import ACQUIRING, PROCESSING, Pending
@@ -268,6 +269,16 @@ class Executor(QibocalExecutor):
                 self, state, overwrite
             ),
         )
+
+    def describe_platform(self) -> PlatformLayout:
+        """Qubits, couplers, channels, and instruments of the platform.
+
+        Read from the local platform, or, for remote runners without one, from
+        the platform created on the remote machine, without connecting it
+        (once). Their configurations, e.g. the frequency of the LO of a
+        channel (:meth:`PlatformLayout.lo_config`), are in the platform state.
+        """
+        return PlatformLayout.from_json(self.runner.platform_layout(self))
 
     def _set_platform_state(
         self,

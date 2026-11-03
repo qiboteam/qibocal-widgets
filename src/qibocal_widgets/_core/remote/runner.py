@@ -49,6 +49,7 @@ class Remote(Runner):
         """The effective connection."""
         self.state: dict | None = None
         """Calibration state of the remote platform, after remote updates."""
+        self._layout: dict | None = None
 
     def __repr__(self) -> str:
         options = self.connection.model_dump(exclude_defaults=True)
@@ -169,6 +170,16 @@ class Remote(Runner):
         else:
             # the remote platform state, sent along with every acquisition
             self.state = state
+
+    def platform_layout(self, executor: Executor) -> dict:
+        """The layout of the remote platform, without a local one: created on the
+        remote machine, without connecting it, outside of the queue, once."""
+        if not self.connection.dispatched or executor.platform is not None:
+            return super().platform_layout(executor)
+        if self._layout is None:
+            job = {"action": "layout", "platform": self._platform(executor)}
+            self._layout = transport.run(self.connection, job, compute=False)["layout"]
+        return self._layout
 
     def save_platform(
         self, executor: Executor, state: dict, overwrite: bool = False
