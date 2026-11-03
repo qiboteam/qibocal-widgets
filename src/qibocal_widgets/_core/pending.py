@@ -15,6 +15,7 @@ from typing import Any
 from qibocal.auto.operation import BoundProtocol
 
 from .completed import MARIMO, MIMEBUNDLE, Completed, View
+from .layout import duration
 from .protocols import reference
 
 __all__ = ["Estimate", "NotStartedError", "Pending"]
@@ -88,6 +89,8 @@ class Pending:
         """The underlying future."""
         self.submitted_at = datetime.now(UTC)
         """When the execution was submitted (UTC)."""
+        self.finished_at: datetime | None = None
+        """When it completed (UTC)."""
         self.views: dict[str, View] = {}
         """Views registered by frontends, keyed by display protocol."""
         self.estimates: list[Estimate] = []
@@ -148,6 +151,7 @@ class Pending:
             self.future = Future()
             self._runs += 1
             self.submitted_at = datetime.now(UTC)
+            self.finished_at = None
             self.estimates = []
             self._launcher = self._rerun
             self._status = WAITING
@@ -211,12 +215,22 @@ class Pending:
     def _estimated(self) -> None:
         """Hook run, in the background thread, on every new estimate."""
 
+    @property
+    def elapsed(self) -> float | None:
+        """Seconds from submission (or the latest run) to completion, if
+        completed: including waiting, e.g. in the queue."""
+        if self.finished_at is None:
+            return None
+        return (self.finished_at - self.submitted_at).total_seconds()
+
     def _resolve(self, completed: Completed) -> None:
+        self.finished_at = datetime.now(UTC)
         self.future.set_result(completed)
         self._set(DONE)
         self._completed()
 
     def _fail(self, error: BaseException) -> None:
+        self.finished_at = datetime.now(UTC)
         self.future.set_exception(error)
         self._set(FAILED)
         self._completed()
@@ -302,10 +316,10 @@ class Pending:
         first, latest = self.estimates[0], self.estimates[-1]
         elapsed = (datetime.now(UTC) - latest.at).total_seconds()
         seconds = max(latest.seconds, 1e-3)
-        text = f"estimated {_duration(latest.seconds)}"
+        text = f"estimated {duration(latest.seconds)}"
         if len(self.estimates) > 1:
             text += (
-                f" (estimate {len(self.estimates)}, first {_duration(first.seconds)})"
+                f" (estimate {len(self.estimates)}, first {duration(first.seconds)})"
             )
         text += f", from {latest.at:%H:%M:%S} UTC"
         if self.batches:
@@ -336,14 +350,3 @@ class Pending:
 
     def __repr__(self) -> str:
         return f"<Pending {self.describe()}>"
-
-
-def _duration(seconds: float) -> str:
-    """A duration, for display."""
-    if seconds < 60:
-        return f"{seconds:.3g} s"
-    minutes, seconds = divmod(round(seconds), 60)
-    if minutes < 60:
-        return f"{minutes} min {seconds} s"
-    hours, minutes = divmod(minutes, 60)
-    return f"{hours} h {minutes} min"

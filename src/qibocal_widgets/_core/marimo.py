@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import threading
 import time
 from collections.abc import Sequence
@@ -49,15 +50,35 @@ def show_data(data: Any) -> mo.Html:
     return mo.accordion(tables, expanded=layout.expanded(tables))
 
 
+def _row(left: Any, right: Sequence[Any], align: str = "flex-start") -> mo.Html:
+    """A line: ``left`` filling it, ``right`` aligned to the right.
+
+    Aligned on top by default, so that ``right`` stays in place when ``left``
+    unfolds (e.g. the fit results).
+    """
+    left_html = "" if left is None else mo.as_html(left).text
+    right_html = "".join(mo.as_html(item).text for item in right)
+    return mo.Html(
+        f"<div style='display: flex; align-items: {align}; gap: 0.5rem'>"
+        f"<div style='flex: 1; min-width: 0'>{left_html}</div>"
+        "<div style='flex: none; display: flex; gap: 0.5rem; align-items: center'>"
+        f"{right_html}</div></div>"
+    )
+
+
 def _report_item(report: Report, update: Any = None) -> mo.Html:
     items: list[Any] = []
+    # folded by default, so that only the plots are visible at first
+    fit = (
+        mo.accordion({layout.FIT_RESULTS: mo.center(mo.Html(report.table))})
+        if report.table
+        else None
+    )
     if update is not None:
-        items.append(mo.ui.anywidget(update))
-    if report.table:
-        # folded by default, so that only the plots are visible at first
-        items.append(
-            mo.accordion({layout.FIT_RESULTS: mo.center(mo.Html(report.table))})
-        )
+        # on the line of the fit results
+        items.append(_row(fit, [mo.ui.anywidget(update)]))
+    elif fit is not None:
+        items.append(fit)
     items.extend(mo.ui.plotly(figure) for figure in report.figures)
     items.extend(mo.plain_text(str(extra)) for extra in report.extra)
     if not items:
@@ -96,21 +117,34 @@ def show_reports(reports_: Any, updates: Updates | None = None) -> mo.Html:
     return mo.accordion(outputs, expanded=layout.expanded(outputs))
 
 
-def display(completed: QibocalCompleted, actions: Sequence[Any] = ()) -> mo.Html:
+def display(
+    completed: QibocalCompleted,
+    actions: Sequence[Any] = (),
+    total: float | None = None,
+) -> mo.Html:
     """Full rendering of an execution: data and, when available, reports.
 
-    Above them, buttons: the given ``actions``, and the platform update of a
-    fitted execution, if not applied automatically (see ``Completed.update``).
+    Above them, a line with the protocol and its times (``total``, since
+    submitted, for background executions), and buttons: the given
+    ``actions``, and the platform update of a fitted execution (see
+    ``Completed.update``).
     """
     updates = getattr(completed, "updates", None)
     buttons = list(actions)
     if updates is not None and updates.available:
         buttons.append(update_button(updates))
-    body = _body(completed, updates)
-    if not buttons:
-        return body
-    row = mo.hstack([mo.ui.anywidget(button) for button in buttons], justify="start")
-    return mo.vstack([row, body])
+    title, times = layout.summary(completed, total)
+    heading = mo.Html(
+        f"<span style='font-weight: 600'>{html.escape(title)}</span>"
+        + (
+            f"<span style='margin-left: 0.75em; opacity: 0.65; font-size: 0.9em'>"
+            f"{html.escape(times)}</span>"
+            if times
+            else ""
+        )
+    )
+    header = _row(heading, [mo.ui.anywidget(b) for b in buttons], align="center")
+    return mo.vstack([header, _body(completed, updates)])
 
 
 def _body(completed: QibocalCompleted, updates: Updates | None) -> mo.Html:
@@ -192,7 +226,9 @@ class Marimo(Frontend):
                 shown = _RENDERED[cell] = (run, set(), time.monotonic())
             shown[1].add(id(pending))
         if pending.status == DONE:
-            return display(pending.result(), actions=[again_button(pending)])
+            return display(
+                pending.result(), actions=[again_button(pending)], total=pending.elapsed
+            )
         if pending.status == FAILED:
             again = mo.ui.anywidget(again_button(pending))
             error = mo.callout(mo.md(f"**{pending.describe()}**"), kind="danger")

@@ -22,6 +22,10 @@ First development version, targeting the executor interface of Qibocal's
   workers, and turn the spinner of a pending execution into a progress bar,
   restarting on each refined estimate, with the first one for comparison, and
   the batches done, when the driver estimates them (`Pending.estimates`).
+- Executions show a header line: the protocol, how long the acquisition and
+  the fit took (and the total, since submitted, for background executions),
+  and, on the right, the *Run again* and *Update* buttons; each target's
+  *Update* is on the line of its fit results.
 - `executor.describe_platform()`: qubits, couplers, channels (kind, port, LO,
   mixer), and instruments of the platform, also for remote runners without a
   local platform; `PlatformLayout.lo_config` locates the LO of a channel in

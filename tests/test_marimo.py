@@ -61,7 +61,7 @@ def expanded_items(html: str) -> list[str]:
 
 
 def test_reports_tab_selected(completed):
-    tabs = display(completed)
+    tabs = body(completed)
     assert isinstance(tabs, marimo.ui.tabs)
     assert tabs.value == "Reports"
 
@@ -71,7 +71,7 @@ def test_data_tab_selected_without_reports(completed):
     failed = wrap(completed)
     failed.reports = None
     failed.error = RuntimeError("boom")
-    assert display(failed).value == "Data"
+    assert body(failed).value == "Data"
 
 
 @pytest.mark.parametrize("show", [show_data, show_reports])
@@ -116,3 +116,10 @@ def test_error_section(completed):
 def test_wrap_plain(completed):
     assert type(completed) is QibocalCompleted
     assert "_display_" in wrap(completed).views
+
+
+def body(completed):
+    """The rendering below the header line."""
+    from qibocal_widgets._core.marimo import _body
+
+    return _body(completed, getattr(completed, "updates", None))

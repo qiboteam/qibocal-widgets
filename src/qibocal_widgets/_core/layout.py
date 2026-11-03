@@ -17,9 +17,11 @@ __all__ = [
     "FIT_RESULTS",
     "REPORTS",
     "data_title",
+    "duration",
     "expanded",
     "initial_section",
     "report_title",
+    "summary",
 ]
 
 DATA = "Data"
@@ -60,3 +62,42 @@ def expanded(items: Sized) -> bool:
     choose among. Users can still fold it.
     """
     return len(items) == 1
+
+
+def duration(seconds: float) -> str:
+    """A duration, for display."""
+    if seconds < 1:
+        return f"{seconds * 1e3:.3g} ms"
+    if seconds < 60:
+        return f"{seconds:.3g} s"
+    minutes, seconds = divmod(round(seconds), 60)
+    if minutes < 60:
+        return f"{minutes} min {seconds} s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} h {minutes} min"
+
+
+def summary(completed: Any, total: float | None = None) -> tuple[str, str]:
+    """Title and timing line of an execution, as complete as the execution.
+
+    The protocol (its task folder, if recorded), then how long the acquisition
+    and the fit took, and, for background executions, the ``total`` time since
+    submitted (including the queue, for remote runners).
+    """
+    from .protocols import reference
+
+    title = "Execution"
+    if getattr(completed, "path", None) is not None:
+        title = completed.path.name
+    elif getattr(completed, "bound", None) is not None:
+        found = reference(completed.bound.protocol)
+        if found is not None:
+            title = found.rpartition(":")[2]
+    times = []
+    if getattr(completed, "data_time", 0):
+        times.append(f"acquired in {duration(completed.data_time)}")
+    if getattr(completed, "results_time", 0) and completed.results is not None:
+        times.append(f"fitted in {duration(completed.results_time)}")
+    if total is not None:
+        times.append(f"total {duration(total)}")
+    return title, " · ".join(times)

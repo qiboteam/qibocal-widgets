@@ -305,8 +305,10 @@ def test_jupyter_run_again():
     pending = executor.submit(fake(npoints=3))
     pending.result(10)
     box = pending.views["_repr_mimebundle_"](pending)
-    ((buttons, result),) = (view.children for view in box.children)
-    again = buttons.children[0]
+    (view,) = box.children
+    header, result = view.children
+    again = header.children[1].children[0]
+    assert "total" in header.children[0].value
     assert isinstance(again, Button) and again.label == "↻ Run again"
     assert isinstance(result, widgets.Tab)
     again.click()

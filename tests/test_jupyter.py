@@ -37,7 +37,9 @@ def test_display_protocol(widget_executor, bound):
 
     view = display(completed)
     assert isinstance(view, widgets.VBox)
-    buttons, widget = view.children
+    header, widget = view.children
+    heading, buttons = header.children
+    assert "fake" in heading.value and "acquired in" in heading.value
     # update=False: offered, to apply after looking at the fit
     assert [b.label for b in buttons.children] == ["⤓ Update all targets"]
     assert isinstance(widget, widgets.Tab)
@@ -65,13 +67,13 @@ def test_mimebundle_renders_display(widget_executor, bound, monkeypatch):
 
 
 def test_acquired_shows_only_data(widget_executor, bound):
-    widget = display(widget_executor.acquire(bound))
+    widget = body(widget_executor.acquire(bound))
     assert isinstance(widget, widgets.Accordion)
     assert titles(widget) == [f"Raw data: {t}" for t in TARGETS]
 
 
 def test_reports_tab_selected(completed):
-    tabs = display(completed)
+    tabs = body(completed)
     assert tabs.get_title(tabs.selected_index) == "Reports"
 
 
@@ -80,7 +82,7 @@ def test_data_tab_selected_without_reports(completed):
     failed = wrap(completed)
     failed.reports = None
     failed.error = RuntimeError("boom")
-    tabs = display(failed)
+    tabs = body(failed)
     assert tabs.get_title(tabs.selected_index) == "Data"
 
 
@@ -118,14 +120,14 @@ def test_show_helpers(completed):
 def test_empty():
     assert "No acquired data" in show_data({}).value
     assert "No report" in show_reports(None).value
-    assert "Nothing to display" in display(Completed()).value
+    assert "Nothing to display" in body(Completed()).value
 
 
 def test_error_section(completed):
     failed = wrap(completed)
     failed.error = RuntimeError("boom")
     failed.success = False
-    widget = display(failed)
+    widget = body(failed)
     assert titles(widget) == ["Data", "Reports", "Error"]
     assert "boom" in widget.children[-1].value
 
@@ -133,3 +135,8 @@ def test_error_section(completed):
 def test_wrap_plain(completed):
     assert type(completed) is QibocalCompleted
     assert "_repr_mimebundle_" in wrap(completed).views
+
+
+def body(completed):
+    """The rendering below the header line."""
+    return display(completed).children[1]

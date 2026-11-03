@@ -6,6 +6,7 @@ Jupyter renderers of pandas and Plotly.
 
 from __future__ import annotations
 
+import html
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -84,13 +85,37 @@ def _fit_results(table: str) -> widgets.Accordion:
     return _accordion({layout.FIT_RESULTS: centered})
 
 
+def _row(
+    left: widgets.Widget | None,
+    right: Sequence[widgets.Widget],
+    align: str = "flex-start",
+) -> widgets.HBox:
+    """A line: ``left`` filling it, ``right`` aligned to the right.
+
+    Aligned on top by default, so that ``right`` stays in place when ``left``
+    unfolds (e.g. the fit results).
+    """
+    filler = left if left is not None else widgets.HTML("")
+    filler.layout.flex = "1 1 auto"
+    filler.layout.min_width = "0"
+    buttons = widgets.HBox(list(right), layout=widgets.Layout(flex="0 0 auto"))
+    return widgets.HBox(
+        [filler, buttons],
+        layout=widgets.Layout(width="100%", align_items=align, gap="0.5em"),
+    )
+
+
 def _report_item(report: Report, update: Any = None) -> widgets.Widget:
     objects: list[Any] = list(report.figures)
     objects.extend(str(extra) for extra in report.extra)
-    children: list[widgets.Widget] = [] if update is None else [update]
-    if report.table:
-        # folded by default, so that only the plots are visible at first
-        children.append(_fit_results(report.table))
+    children: list[widgets.Widget] = []
+    # folded by default, so that only the plots are visible at first
+    fit = _fit_results(report.table) if report.table else None
+    if update is not None:
+        # on the line of the fit results
+        children.append(_row(fit, [update]))
+    elif fit is not None:
+        children.append(fit)
     if objects:
         children.append(_output(*objects))
     if not children:
@@ -130,21 +155,33 @@ def show_reports(reports_: Any, updates: Updates | None = None) -> widgets.Widge
 
 
 def display(
-    completed: QibocalCompleted, actions: Sequence[widgets.Widget] = ()
+    completed: QibocalCompleted,
+    actions: Sequence[widgets.Widget] = (),
+    total: float | None = None,
 ) -> widgets.Widget:
     """Full rendering of an execution: data and, when available, reports.
 
-    Above them, buttons: the given ``actions``, and the platform update of a
-    fitted execution, if not applied automatically (see ``Completed.update``).
+    Above them, a line with the protocol and its times (``total``, since
+    submitted, for background executions), and buttons: the given
+    ``actions``, and the platform update of a fitted execution (see
+    ``Completed.update``).
     """
     updates = getattr(completed, "updates", None)
     buttons = list(actions)
     if updates is not None and updates.available:
         buttons.append(update_button(updates))
-    body = _body(completed, updates)
-    if not buttons:
-        return body
-    return widgets.VBox([widgets.HBox(buttons), body])
+    title, times = layout.summary(completed, total)
+    heading = widgets.HTML(
+        f"<b>{html.escape(title)}</b>"
+        + (
+            f"<span style='margin-left: 0.75em; opacity: 0.65; font-size: 0.9em'>"
+            f"{html.escape(times)}</span>"
+            if times
+            else ""
+        )
+    )
+    header = _row(heading, buttons, align="center")
+    return widgets.VBox([header, _body(completed, updates)])
 
 
 def _body(completed: QibocalCompleted, updates: Updates | None) -> widgets.Widget:
@@ -196,7 +233,11 @@ class Jupyter(Frontend):
         def show(pending: Pending) -> None:
             if pending.status == DONE:
                 box.children = [
-                    display(pending.result(), actions=[again_button(pending)])
+                    display(
+                        pending.result(),
+                        actions=[again_button(pending)],
+                        total=pending.elapsed,
+                    )
                 ]
             elif pending.status == FAILED:
                 box.children = [

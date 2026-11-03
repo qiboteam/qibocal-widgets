@@ -125,3 +125,38 @@ def test_whole_update(platform):
         completed.update([0])
     assert completed.update() == TARGETS
     assert completed.updates.pending == []
+
+
+def test_summary(platform, tmp_path):
+    from qibocal_widgets._core.layout import duration, summary
+
+    executor = Executor(platform, path=tmp_path / "s", targets=TARGETS, update=False)
+    acquired = executor.acquire(fake(npoints=3))
+    title, times = summary(acquired)
+    assert title == "fake-0" and times.startswith("acquired in ")
+    assert "fitted" not in times
+    fitted = executor.fit(acquired)
+    assert " · fitted in " in summary(fitted)[1]
+    assert summary(fitted, total=75)[1].endswith(" · total 1 min 15 s")
+    assert (duration(0.0123), duration(2.5)) == ("12.3 ms", "2.5 s")
+    assert duration(3725) == "1 h 2 min"
+
+
+def test_update_on_fit_results_line(platform):
+    widgets = pytest.importorskip("ipywidgets")
+    pytest.importorskip("marimo")
+    from qibocal_widgets._core.button import Button
+    from qibocal_widgets.jupyter import show_reports
+    from qibocal_widgets.marimo import show_reports as marimo_reports
+
+    completed = Executor(platform, targets=TARGETS, update=False)(fake(npoints=3))
+    accordion = show_reports(completed)
+    first = accordion.children[0]  # the report of target 0
+    row = first.children[0]
+    fit, buttons = row.children
+    assert isinstance(fit, widgets.Accordion)  # the fit results, folded
+    assert isinstance(buttons.children[0], Button)
+    assert buttons.children[0].label == "⤓ Update"
+    # in Marimo, the same line holds the fit results and the button
+    html = marimo_reports(completed).text
+    assert html.count("flex: none") == len(TARGETS)
