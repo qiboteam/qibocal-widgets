@@ -100,9 +100,14 @@ def test_spinner_replaced(cells):
     runner = Gated()
     pending = executor(runner).submit(fake(npoints=3))
     assert isinstance(pending, frontend.MarimoPending)
-    pending._display_()  # the cell output: a spinner
+    pending._display_()  # the cell output: the progress
     pending._estimate(3.0)
-    wait_for(lambda: any("estimated 3 s" in t for t in shown(cells)))  # progress
+    wait_for(
+        lambda: any(
+            getattr(getattr(obj, "widget", None), "executions", None)
+            for _, obj in cells.outputs
+        )
+    )  # replaced, with the estimate
     runner.gate.set()
     pending.result(10)
     wait_for(lambda: "Target 0" in shown(cells)[-1])  # the result

@@ -10,6 +10,7 @@ from fake import FakeData, fake
 from qibocal import Executor as QibocalExecutor
 
 from qibocal_widgets import Completed, Executor, Pending, Runner
+from qibocal_widgets._core.progress_view import ProgressView
 from qibocal_widgets._core.remote import worker
 from qibocal_widgets._core.remote.worker import _scrape
 
@@ -193,12 +194,13 @@ def test_frontends(bound):
     )
     pending = executor.submit(bound)
     wait_for(lambda: pending.status == "acquiring")
-    spinner = pending._display_()
-    assert type(spinner).__name__ == "spinner"  # outside notebooks: no reactivity
+    view = pending._display_()
+    assert isinstance(view.widget, ProgressView)  # outside notebooks too
+    assert view.widget.status == "acquiring" and view.widget.phase == "running"
     assert pending() is None
     box = pending.views["_repr_mimebundle_"](pending)
     assert isinstance(box, widgets.VBox)
-    assert "acquiring" in box.children[0].value
+    assert box.children[0].status == "acquiring"
     runner.gate(bound.parameters.npoints).set()
     completed = pending.result(10)
     wait_for(lambda: find_widget(box, widgets.Tab) is not None)  # updated live
@@ -371,13 +373,15 @@ def test_estimates_captured():
     wait_for(lambda: len(pending.estimates) == 2)
     assert [e.seconds for e in pending.estimates] == list(ESTIMATES)
     assert [e.kind for e in pending.estimates] == ["execution", "batch"]
-    bar = pending.progress()
-    assert "estimated 2.5 s (estimate 2, first 2 s)" in bar
-    assert "batches done: 0/?" in bar
-    assert "animation: qibocal-widgets-progress 2.500s linear" in bar
+    (execution,) = pending.timeline.executions
+    assert execution.estimate == ESTIMATES[0]
+    assert [batch.estimate for batch in execution.batches] == [ESTIMATES[1]]
+    assert execution.refined == ESTIMATES[1] and pending.batches == 1
+    assert execution.measured is None  # still running
     gate.set()
     pending.result(10)
-    assert pending.progress() is None  # only while acquiring
+    (execution,) = pending.timeline.executions
+    assert execution.measured is not None  # until the end of the acquisition
     # the loggers are left as they were
     assert [logger.level for logger in loggers] == levels
     assert all(_scrape not in logger.filters for logger in loggers)
@@ -426,9 +430,14 @@ def test_estimate_views(bound):
     wait_for(lambda: pending.status == "acquiring")
     box = pending.views["_repr_mimebundle_"](pending)
     pending._estimate(90.0)
-    wait_for(lambda: "progress" in box.children[0].value)  # updated live
-    assert "estimated 1 min 30 s" in box.children[0].value
-    assert "1 min 30 s" in pending._display_().text
+    wait_for(lambda: box.children[0].executions)  # updated live
+    assert box.children[0].executions[0]["estimate"] == 90.0
+    assert pending._display_().widget.executions[0]["estimate"] == 90.0
+    # the fold of the estimates stays as the user left it, across updates
+    box.children[0].unfolded = True
+    pending._estimate(30.0, "batch")
+    wait_for(lambda: box.children[0].executions[0]["batches"])
+    assert box.children[0].unfolded
     runner.gate(bound.parameters.npoints).set()
     pending.result(10)
     wait_for(lambda: find_widget(box, widgets.Tab) is not None)
@@ -440,15 +449,45 @@ def test_batches(bound):
     pending = executor.submit(bound)
     wait_for(lambda: pending.status == "acquiring")
     pending._estimate(10.0)
-    assert pending.batches == 0
-    assert "batches" not in pending.progress()  # no driver estimate
+    assert pending.batches == 0  # no driver estimate
     for seconds in (4.0, 4.0, 3.0):
         pending._estimate(seconds, "batch")
     assert pending.batches == 3
-    assert "batches done: 2/?" in pending.progress()
     pending._estimate(10.0)  # the next execution on the platform
     assert pending.batches == 0
     pending._estimate(5.0, "batch")
-    assert "batches done: 0/?" in pending.progress()
+    first, second = pending.timeline.executions
+    assert (first.refined, second.refined) == (11.0, 5.0)
+    assert first.measured is not None and second.measured is None
+    # the first refined (complete), the current one as a whole
+    assert pending.timeline.estimated() == 21.0
     runner.gate(bound.parameters.npoints).set()
     pending.result(10)
+
+
+def test_phases(bound):
+    """Phases within the statuses, in order, as observed."""
+    seen = []
+    runner = Gated()
+    executor = Executor(None, targets=TARGETS, update=False, runner=runner)
+    pending = executor.submit(bound)
+    pending.on_change(lambda p: seen.append((p.status, p.phase)))
+    runner.gate(bound.parameters.npoints).set()
+    pending.result(10)
+    wait_for(lambda: pending.status == "done")
+    phases = [phase for status, phase in seen if status == "processing" and phase]
+    assert phases == ["recording", "fitting", "reporting"]
+    assert pending.phase is None
+    kinds = [event.kind for event in pending.timeline.events]
+    assert kinds == ["started", "acquired"]
+
+
+def test_waiting_for_earlier():
+    runner = Gated()
+    executor = Executor(None, targets=TARGETS, update=False, runner=runner)
+    first, second = executor.submit(fake(npoints=3)), executor.submit(fake(npoints=4))
+    runner.gate(4).set()
+    wait_for(lambda: second.phase == "waiting for earlier executions")
+    assert "processing, waiting for earlier executions" in second.describe()
+    runner.gate(3).set()
+    first.result(10), second.result(10)

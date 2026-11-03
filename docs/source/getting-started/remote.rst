@@ -188,17 +188,34 @@ result arrives.)
 result arrives, and ``pending.result()`` waits for it where needed; dependent
 cells do not run again by themselves, as usual in Jupyter.
 
-**Progress.** Qibolab logs an estimate of the duration of every execution on
-the platform, and drivers may refine it just before starting (Qblox does,
-accounting for its overheads). The estimates are captured where the
-acquisition runs, locally or by the remote worker, which streams them back
-while the job runs: the displayed spinner becomes a progress bar, filling in
-the estimated time. Each new estimate starts the bar again, since the
-acquisition starts after it, showing the first one for comparison. Drivers
-estimating each batch (Qblox) also count them: ``batches done: 2/?``, the total
-being unknown in advance; the count starts again with each execution on the
-platform. The estimates received are in ``pending.estimates``. Capturing them changes
-nothing in the logs: they are only emitted where they already were.
+**Progress.** While running, a pending execution shows what it is doing, and
+how long it has been since submitted:
+
+- acquiring: *queued* (remote jobs, until they reach their node), *starting*,
+  *running*, *receiving the data* (remote jobs, once acquired);
+- processing, with a different indicator: *waiting for earlier executions*
+  (processed in order), *recording*, *fitting*, *reporting*, *updating*.
+
+While running, the progress comes from the estimates logged by qibolab and its
+drivers, captured where the acquisition runs (locally, or by the remote
+worker, which streams them back), at two levels:
+
+- each ``platform.execute()`` call, estimated by qibolab as a whole: an
+  acquisition may make any number of them, not known in advance
+  (``Execution k / ?``);
+- each batch of a call, estimated by the driver (Qblox), before it runs
+  (``Batch j / ?``): together they refine the estimate of their execution.
+
+Each has a bar filling in its estimated time, turning red and striped when
+running over. With several executions, the acquisition line adds up the time
+elapsed and the estimates so far. *Estimates* unfolds all of them, with the
+time measured until the next event (for batches, this includes fetching their
+results and preparing the next one). The events are in ``pending.timeline``
+(grouped as ``pending.timeline.executions``), and the phase in
+``pending.phase``. Capturing the estimates changes nothing in the logs.
+Announcing the number of batches and executions in advance needs qibolab and
+Qibocal (`qibolab#1629 <https://github.com/qiboteam/qibolab/issues/1629>`_,
+`qibocal#1768 <https://github.com/qiboteam/qibocal/issues/1768>`_).
 
 **Avoiding repeated acquisitions.** Notebooks run cells again, unintentionally
 too (in Marimo, whenever an upstream cell changes). With ``reuse=True``,

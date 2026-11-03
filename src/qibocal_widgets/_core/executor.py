@@ -35,12 +35,13 @@ from .history import EDIT, UPDATE, PlatformHistory
 from .layout_platform import PlatformLayout
 from .middleware import Middleware
 from .output import REPORTS_DIR, default_path
-from .pending import ACQUIRING, PROCESSING, Pending
+from .pending import ACQUIRING, PROCESSING, RUNNING, WAITING_EARLIER, Pending
 from .protocols import reference, registered_name
 from .remote.worker import parameters_document
 from .runner import Local, Runner
 from .session import Session
 from .state import PlatformState
+from .timeline import ACQUIRED, STARTED
 from .updates import Updates, _key
 
 __all__ = ["Executor"]
@@ -490,22 +491,32 @@ class Executor(QibocalExecutor):
         try:
             lock = nullcontext() if self.runner.concurrent else self._instruments
             with lock:
+                phase = self.runner.acquiring_phase(self)
+                pending.phase = phase
                 pending._set(ACQUIRING)
-                with self, progress.reporting(pending._estimate):
+                if phase == RUNNING:
+                    pending._event(STARTED)
+                with self, progress.reporting(pending._event):
                     acquired = self._chain("acquire", bound, **kwargs)
         except BaseException as exception:  # noqa: BLE001 - reported to the caller
             error = exception
+        pending.phase = None
         pending._set(PROCESSING)
+        if pending.timeline.started is not None and pending.timeline.ended is None:
+            pending._event(ACQUIRED)
         with self._order:
+            if self._processed != ticket:
+                pending._set_phase(WAITING_EARLIER)
             self._order.wait_for(lambda: self._processed == ticket)
         try:
             if error is not None:
                 raise error
+            pending._set_phase("recording")
             recorded = self._record(acquired)
             if key is not None and self.session is not None:
                 with self._records:
                     self.session.tag(recorded, key)
-            completed = self._complete(self._finish(recorded), skip_fit)
+            completed = self._complete(self._finish(recorded), skip_fit, pending)
         except BaseException as exception:  # noqa: BLE001 - reported to the caller
             pending._fail(exception)
         else:
@@ -516,18 +527,28 @@ class Executor(QibocalExecutor):
                 self._running.pop(key, None)
                 self._order.notify_all()
 
-    def _complete(self, completed: Completed, skip_fit: bool) -> Completed:
+    def _complete(
+        self, completed: Completed, skip_fit: bool, pending: Pending | None = None
+    ) -> Completed:
         """The steps following the acquisition, as in ``qibocal.Executor.__call__``."""
+
+        def phase(name: str) -> None:
+            if pending is not None:
+                pending._set_phase(name)
+
         protocol = completed.bound.protocol
         if not skip_fit and protocol.fit is not None:
+            phase("fitting")
             completed = self.fit(completed)
         if completed.results is not None and protocol.report is not None:
+            phase("reporting")
             completed = self.report(completed)
         if (
             completed.results is not None
             and protocol.update is not None
             and self._update_enabled
         ):
+            phase("updating")
             completed = self.update(completed)
         return completed
 

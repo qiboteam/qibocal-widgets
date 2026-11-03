@@ -18,6 +18,7 @@ from .completed import MARIMO, Completed
 from .data import data_frames
 from .frontend import Frontend
 from .pending import DONE, FAILED, READY, Pending
+from .progress_view import ProgressView
 from .reports import Report, reports, reports_of
 
 if TYPE_CHECKING:
@@ -212,8 +213,8 @@ class Marimo(Frontend):
     def render_pending(self, pending: Pending) -> Any:
         """A spinner while running, then the result (or the error).
 
-        The spinner becomes a progress bar when the duration of the acquisition
-        is estimated, starting again on each refined estimate.
+        While running, the phase, and the progress of the acquisition from the
+        estimates of its executions and batches (see :class:`ProgressView`).
 
         Displayed as the output of the cell which submitted it, the spinner is
         replaced by the result when the execution completes (unless other
@@ -235,10 +236,7 @@ class Marimo(Frontend):
             return mo.vstack([again, error])
         if pending.status == READY:
             return mo.ui.anywidget(run_button(pending))
-        bar = pending.progress()
-        if bar is not None:
-            return mo.Html(bar)
-        return mo.status.spinner(title=pending.name, subtitle=pending.describe())
+        return mo.ui.anywidget(ProgressView(pending))
 
 
 _RENDERED: dict[str, tuple[object, set[int], float]] = {}
@@ -288,7 +286,8 @@ def _follow(pending: Pending, cell: str, run: object) -> None:
     if isinstance(pending, MarimoPending):
         pending._follow(+1)
     # a completed execution is displayed as such: nothing to replace yet
-    shown = (pending.status, 0, pending._runs) if pending.status in ENDED else None
+    state = (pending.status, pending.phase, len(pending.timeline.events), pending._runs)
+    shown = state if pending.status in ENDED else None
     ended = None
     idle = False
     try:
@@ -307,7 +306,12 @@ def _follow(pending: Pending, cell: str, run: object) -> None:
             )
             if alone and (wait := displayed[2] + GRACE - time.monotonic()) > 0:
                 time.sleep(wait)  # until the displayed output has been sent
-            state = (pending.status, len(pending.estimates), pending._runs)
+            state = (
+                pending.status,
+                pending.phase,
+                len(pending.timeline.events),
+                pending._runs,
+            )
             if alone and state != shown:
                 mo.output.replace(pending._display_())
                 shown = state

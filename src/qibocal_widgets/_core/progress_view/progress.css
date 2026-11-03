@@ -1,0 +1,178 @@
+.qw-progress {
+  --qw-border: rgba(128, 128, 128, 0.3);
+  --qw-running: #3b82f6;
+  --qw-over: #ef4444;
+  --qw-processing: #f59e0b;
+  --qw-idle: rgba(128, 128, 128, 0.55);
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  max-width: 42em;
+  margin: 0.25em auto;
+  padding: 0.5em 0.75em;
+  border: 1px solid var(--qw-border);
+  border-radius: 6px;
+}
+
+.qw-progress .qw-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.qw-progress .qw-name {
+  font-weight: 600;
+}
+
+.qw-progress .qw-phase {
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+}
+
+.qw-progress .qw-phase.qw-acquiring {
+  color: var(--qw-running);
+}
+
+.qw-progress .qw-phase.qw-processing {
+  color: var(--qw-processing);
+}
+
+.qw-progress .qw-clock {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+/* a spinner while acquiring, a pulse while processing: different phases */
+.qw-progress .qw-indicator {
+  width: 0.9em;
+  height: 0.9em;
+  border-radius: 50%;
+  flex: none;
+}
+
+.qw-progress .qw-indicator.qw-acquiring,
+.qw-progress .qw-indicator.qw-waiting {
+  border: 2px solid var(--qw-border);
+  border-top-color: var(--qw-running);
+  animation: qw-spin 0.9s linear infinite;
+}
+
+.qw-progress .qw-indicator.qw-waiting {
+  border-top-color: var(--qw-idle);
+}
+
+.qw-progress .qw-indicator.qw-processing {
+  background: var(--qw-processing);
+  animation: qw-pulse 1.2s ease-in-out infinite;
+}
+
+.qw-progress .qw-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  align-items: center;
+  gap: 0.35em 0.75em;
+  margin-top: 0.5em;
+}
+
+.qw-progress .qw-grid.qw-single {
+  grid-template-columns: 1fr;
+}
+
+.qw-progress .qw-label {
+  white-space: nowrap;
+}
+
+.qw-progress .qw-detail {
+  margin-left: 0.3em;
+  opacity: 0.55;
+}
+
+.qw-progress .qw-timing {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.qw-progress .qw-track {
+  height: 0.5em;
+  border-radius: 0.25em;
+  background: rgba(127, 127, 127, 0.2);
+  overflow: hidden;
+  position: relative;
+}
+
+.qw-progress .qw-fill {
+  height: 100%;
+  width: 0;
+  background: var(--qw-running);
+}
+
+.qw-progress .qw-track.qw-over .qw-fill {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--qw-over) 0 6px,
+    rgba(239, 68, 68, 0.6) 6px 12px
+  );
+}
+
+.qw-progress .qw-track.qw-indeterminate .qw-fill {
+  width: 30%;
+  position: absolute;
+  background: var(--qw-processing);
+  animation: qw-slide 1.4s ease-in-out infinite;
+}
+
+.qw-progress .qw-estimates {
+  margin-top: 0.5em;
+  font-size: 12px;
+}
+
+.qw-progress .qw-estimates summary {
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.qw-progress .qw-estimates table {
+  border-collapse: collapse;
+  margin-top: 0.25em;
+  font-variant-numeric: tabular-nums;
+}
+
+.qw-progress .qw-estimates th,
+.qw-progress .qw-estimates td {
+  padding: 1px 10px 1px 0;
+  text-align: left;
+}
+
+.qw-progress .qw-estimates th {
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.qw-progress .qw-estimates .qw-sub td:first-child {
+  padding-left: 1em;
+}
+
+@keyframes qw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes qw-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes qw-slide {
+  from {
+    left: -30%;
+  }
+  to {
+    left: 100%;
+  }
+}

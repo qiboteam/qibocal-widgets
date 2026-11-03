@@ -20,6 +20,7 @@ from .completed import MIMEBUNDLE, Completed
 from .data import data_frames
 from .frontend import Frontend
 from .pending import DONE, FAILED, READY, Pending
+from .progress_view import ProgressView
 from .reports import Report, reports, reports_of
 
 if TYPE_CHECKING:
@@ -226,7 +227,7 @@ class Jupyter(Frontend):
 
     def render_pending(self, pending: Pending) -> Any:
         """A live view: the *Run* button, if waiting for confirmation, the
-        state (a progress bar, once estimated), then the result, with a *Run
+        progress (see :class:`ProgressView`), then the result, with a *Run
         again* button."""
         box = widgets.VBox([])
 
@@ -246,10 +247,8 @@ class Jupyter(Frontend):
                 ]
             elif pending.status == READY:
                 box.children = [run_button(pending)]
-            elif (bar := pending.progress()) is not None:
-                box.children = [widgets.HTML(bar)]
             else:
-                box.children = [_message(pending.describe())]
+                box.children = [ProgressView(pending)]
 
         show(pending)
         pending.on_change(lambda pending: _on_kernel(show, pending))

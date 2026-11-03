@@ -153,7 +153,8 @@ def _kill(process: subprocess.Popen) -> None:
 def run(connection: Connection, job: dict, *, compute: bool) -> dict:
     """Execute a job remotely, and return its outcome.
 
-    Duration estimates streamed by the worker are reported, as they arrive,
+    Events streamed by the worker (duration estimates, start and end of the
+    acquisition) are reported, as they arrive,
     with :func:`progress.report <qibocal_widgets._core.progress.report>`.
 
     Raises:
@@ -192,10 +193,11 @@ def run(connection: Connection, job: dict, *, compute: bool) -> dict:
                 outcome = json.loads(line[len(worker.MARKER) :])
             elif line.startswith(worker.PROGRESS):
                 with contextlib.suppress(ValueError, KeyError, TypeError):
-                    estimate = json.loads(line[len(worker.PROGRESS) :])
+                    event = json.loads(line[len(worker.PROGRESS) :])
+                    seconds = event.get("estimate")
                     progress.report(
-                        float(estimate["estimate"]),
-                        str(estimate.get("kind", "execution")),
+                        str(event.get("kind", "execution")),
+                        None if seconds is None else float(seconds),
                     )
         process.wait()
     finally:

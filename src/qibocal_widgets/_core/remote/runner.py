@@ -153,6 +153,13 @@ class Remote(Runner):
         job = {"action": "describe", "platform": self._platform(executor)}
         return transport.run(self.connection, job, compute=False)["state"]
 
+    def acquiring_phase(self, executor: Executor) -> str:
+        """Dispatched jobs are ``queued`` (or ``starting``, without a queue),
+        until the worker reports their start."""
+        if not self.connection.dispatched:
+            return super().acquiring_phase(executor)
+        return "queued" if self.connection.scheduled else "starting"
+
     def platform_state(self, executor: Executor) -> dict | None:
         state = self._state(executor)
         if (

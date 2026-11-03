@@ -17,11 +17,12 @@ First development version, targeting the executor interface of Qibocal's
   remote runners and processed in submission order; displayed live in
   Jupyter; in Marimo, run in `mo.Thread` and reactive (cells referencing it run
   again when it completes), shown as a spinner replaced by the result.
-- Acquisition progress: the duration estimates logged by qibolab and its
-  drivers (e.g. Qblox) are captured, locally or streamed back by remote
-  workers, and turn the spinner of a pending execution into a progress bar,
-  restarting on each refined estimate, with the first one for comparison, and
-  the batches done, when the driver estimates them (`Pending.estimates`).
+- Progress of pending executions: their phase (queued, running, receiving the
+  data; waiting for earlier executions, fitting, reporting, updating), and
+  bars for the current `platform.execute()` call and its batch, from the
+  estimates logged by qibolab and its drivers (e.g. Qblox), captured locally
+  or streamed back by remote workers, with the estimates and measured times
+  of all of them (`Pending.timeline`, `Pending.phase`).
 - Executions show a header line: the protocol, how long the acquisition and
   the fit took (and the total, since submitted, for background executions),
   and, on the right, the *Run again* and *Update* buttons; each target's

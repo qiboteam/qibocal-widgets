@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import html
 import threading
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
@@ -15,8 +14,8 @@ from typing import Any
 from qibocal.auto.operation import BoundProtocol
 
 from .completed import MARIMO, MIMEBUNDLE, Completed, View
-from .layout import duration
 from .protocols import reference
+from .timeline import ACQUIRED, BATCH, EXECUTION, STARTED, Event, Timeline
 
 __all__ = ["Estimate", "NotStartedError", "Pending"]
 
@@ -51,10 +50,16 @@ class Estimate:
     ``batch``, for one of its batches (refined by the driver, e.g. Qblox)."""
 
 
-PROGRESS_STYLE = (
-    "<style>@keyframes qibocal-widgets-progress"
-    " { from { width: 0 } to { width: 100% } }</style>"
-)
+QUEUED = "queued"
+"""Acquiring: waiting in the queue of a remote runner."""
+STARTING = "starting"
+"""Acquiring: starting remotely, e.g. connecting."""
+RUNNING = "running"
+"""Acquiring: running."""
+TRANSFERRING = "transferring"
+"""Acquiring: acquired remotely, receiving the data."""
+WAITING_EARLIER = "waiting for earlier executions"
+"""Processing: earlier submissions are processed first."""
 
 
 class Pending:
@@ -93,9 +98,13 @@ class Pending:
         """When it completed (UTC)."""
         self.views: dict[str, View] = {}
         """Views registered by frontends, keyed by display protocol."""
-        self.estimates: list[Estimate] = []
-        """Duration estimates received while acquiring, in order: each one
-        refines the previous ones, and restarts the progress bar."""
+        self.timeline = Timeline()
+        """Events of the acquisition: start, duration estimates, end."""
+        self._view_state: dict[str, Any] = {}
+        """State of the displayed views to keep across updates (e.g. folds)."""
+        self.phase: str | None = None
+        """What the execution is doing, within its status (e.g. ``queued`` or
+        ``fitting``)."""
         self.overrides: dict[str, Any] = {}
         """Execution overrides (e.g. ``targets``), as given to ``submit``."""
         self._status = READY
@@ -152,7 +161,8 @@ class Pending:
             self._runs += 1
             self.submitted_at = datetime.now(UTC)
             self.finished_at = None
-            self.estimates = []
+            self.timeline = Timeline()
+            self.phase = None
             self._launcher = self._rerun
             self._status = WAITING
         self._restarted()
@@ -206,14 +216,34 @@ class Pending:
         for callback in callbacks:
             callback(self)
 
-    def _estimate(self, seconds: float, kind: str = "execution") -> None:
-        """Record a duration estimate (from the acquiring thread)."""
-        self.estimates.append(Estimate(seconds, datetime.now(UTC), kind))
-        self._notify()
-        self._estimated()
+    @property
+    def estimates(self) -> list[Estimate]:
+        """Duration estimates received while acquiring, in order (see
+        :attr:`timeline`, which groups them)."""
+        return [
+            Estimate(event.seconds, event.at, event.kind)
+            for event in self.timeline.events
+            if event.kind in (EXECUTION, BATCH)
+        ]
 
-    def _estimated(self) -> None:
-        """Hook run, in the background thread, on every new estimate."""
+    def _event(self, kind: str, seconds: float | None = None) -> None:
+        """Record an event of the acquisition (from the acquiring thread)."""
+        self.timeline.events.append(Event(kind, datetime.now(UTC), seconds))
+        if kind in (STARTED, EXECUTION, BATCH) and self.phase != RUNNING:
+            self.phase = RUNNING
+        elif kind == ACQUIRED and self._status == ACQUIRING:
+            self.phase = TRANSFERRING
+        self._notify()
+
+    def _estimate(self, seconds: float, kind: str = EXECUTION) -> None:
+        """Record a duration estimate."""
+        self._event(kind, seconds)
+
+    def _set_phase(self, phase: str | None) -> None:
+        """Record what the execution is doing, within its status."""
+        if phase != self.phase:
+            self.phase = phase
+            self._notify()
 
     @property
     def elapsed(self) -> float | None:
@@ -225,12 +255,14 @@ class Pending:
 
     def _resolve(self, completed: Completed) -> None:
         self.finished_at = datetime.now(UTC)
+        self.phase = None
         self.future.set_result(completed)
         self._set(DONE)
         self._completed()
 
     def _fail(self, error: BaseException) -> None:
         self.finished_at = datetime.now(UTC)
+        self.phase = None
         self.future.set_exception(error)
         self._set(FAILED)
         self._completed()
@@ -290,51 +322,15 @@ class Pending:
             return f"{self.name}: failed, {self.future.exception()!r}"
         if self._status == READY:
             return f"{self.name}: ready, waiting for confirmation"
-        return f"{self.name}: {self._status}, submitted at {self.submitted_at:%H:%M:%S} UTC"
+        state = self._status if self.phase is None else f"{self._status}, {self.phase}"
+        return f"{self.name}: {state}, submitted at {self.submitted_at:%H:%M:%S} UTC"
 
     @property
     def batches(self) -> int:
         """Batches started in the current execution on the platform, as
         estimated by the driver: all but the last are done."""
-        count = 0
-        for estimate in reversed(self.estimates):
-            if estimate.kind != "batch":
-                break
-            count += 1
-        return count
-
-    def progress(self) -> str | None:
-        """A progress bar, as HTML, while acquiring with an estimate.
-
-        It fills in the latest estimated duration, from when the estimate was
-        received, with a CSS animation: no further update is needed. The
-        first estimate is shown for comparison, and the batches done, once
-        the driver estimates them (their total is not known in advance).
-        """
-        if self._status != ACQUIRING or not self.estimates:
-            return None
-        first, latest = self.estimates[0], self.estimates[-1]
-        elapsed = (datetime.now(UTC) - latest.at).total_seconds()
-        seconds = max(latest.seconds, 1e-3)
-        text = f"estimated {duration(latest.seconds)}"
-        if len(self.estimates) > 1:
-            text += (
-                f" (estimate {len(self.estimates)}, first {duration(first.seconds)})"
-            )
-        text += f", from {latest.at:%H:%M:%S} UTC"
-        if self.batches:
-            text += f"; batches done: {self.batches - 1}/?"
-        animation = (
-            f"qibocal-widgets-progress {seconds:.3f}s linear {-elapsed:.3f}s forwards"
-        )
-        return (
-            f"{PROGRESS_STYLE}<div style='min-width: 16em; max-width: 40em'>"
-            f"<div><b>{html.escape(self.name)}</b>: acquiring, {text}</div>"
-            "<div style='height: 0.5em; margin-top: 0.3em; border-radius: 0.25em;"
-            " background: rgba(127, 127, 127, 0.25); overflow: hidden'>"
-            "<div style='height: 100%; width: 0; background: #3b82f6;"
-            f" animation: {animation}'></div></div></div>"
-        )
+        executions = self.timeline.executions
+        return len(executions[-1].batches) if executions else 0
 
     def _display_(self) -> Any:
         """Marimo display protocol."""

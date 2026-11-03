@@ -33,6 +33,11 @@ class Runner:
         """
         return False
 
+    def acquiring_phase(self, executor: Executor) -> str:
+        """The phase of an acquisition as it begins: ``running`` here, or e.g.
+        ``queued`` for jobs which report when they start."""
+        return "running"
+
     def open(self, executor: Executor) -> None:
         """Enter the execution context: connect the platform.
 

@@ -35,7 +35,8 @@ from pathlib import Path
 MARKER = "QIBOCAL_WIDGETS_RESULT "
 """Prefix of the line carrying the outcome on the standard output."""
 PROGRESS = "QIBOCAL_WIDGETS_PROGRESS "
-"""Prefix of the lines carrying duration estimates, while acquiring."""
+"""Prefix of the lines carrying events, while acquiring: duration estimates,
+and the start and end of the acquisition."""
 ESTIMATE_LOGGERS = {
     "qibolab._core.platform.platform": "execution",
     "qibolab._core.instruments.qblox.cluster": "batch",
@@ -110,7 +111,12 @@ def estimates(callback):
 
 def emit_estimate(seconds: float, kind: str) -> None:
     """Write a duration estimate line."""
-    sys.stdout.write(PROGRESS + json.dumps({"estimate": seconds, "kind": kind}) + "\n")
+    emit_event(kind, seconds)
+
+
+def emit_event(kind: str, seconds: "float | None" = None) -> None:
+    """Write an event line: ``started``, ``acquired``, or an estimate."""
+    sys.stdout.write(PROGRESS + json.dumps({"kind": kind, "estimate": seconds}) + "\n")
     sys.stdout.flush()
 
 
@@ -330,6 +336,7 @@ def _jsonable(obj):
 
 def acquire(job: dict) -> dict:
     """Acquire data on the connected platform."""
+    emit_event("started")  # e.g. out of the queue
     from qibocal import Executor
 
     bound = bind(job)
@@ -341,6 +348,7 @@ def acquire(job: dict) -> dict:
             completed = executor.acquire(bound, **job.get("overrides", {}))
     finally:
         created.disconnect()
+    emit_event("acquired")  # the data follow
     with tempfile.TemporaryDirectory() as folder:
         completed.data.save(Path(folder))
         files = encode(Path(folder))

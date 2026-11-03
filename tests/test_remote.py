@@ -626,6 +626,22 @@ def test_submit_remote(cluster, tmp_path, monkeypatch, mock_frequency):
     assert [call["tool"] for call in cluster()].count("srun") == 3
 
 
+def test_queued(cluster, monkeypatch, bound):
+    """Until the worker reports its start, a queued job is queued."""
+    monkeypatch.setenv("FAKE_SLEEP", "1")
+    executor = Executor(
+        None,
+        targets=TARGETS,
+        update=False,
+        runner=Remote(queue="chip", platform="mock"),
+    )
+    pending = executor.submit(bound)
+    phases = [pending.phase]
+    pending.on_change(lambda p: phases.append(p.phase))
+    pending.result(60)
+    assert phases.index("queued") < phases.index("running")
+
+
 def test_estimates_streamed(cluster, monkeypatch):
     """Duration estimates logged remotely reach the pending execution."""
     from fake import ESTIMATES, FakeParameters, estimated
@@ -638,9 +654,16 @@ def test_estimates_streamed(cluster, monkeypatch):
         runner=Remote(queue="chip", platform="mock"),
     )
     pending = executor.submit(estimated(pars=FakeParameters(npoints=3)))
+    phases = []
+    pending.on_change(lambda p: phases.append(p.phase))
     pending.result(60)
     assert [e.seconds for e in pending.estimates] == list(ESTIMATES)
     assert [e.kind for e in pending.estimates] == ["execution", "batch"]
+    # from the worker: when the job left the queue, and when it acquired
+    kinds = [event.kind for event in pending.timeline.events]
+    assert kinds == ["started", "execution", "batch", "acquired"]
+    assert phases.index("running") < phases.index("transferring")
+    assert pending.timeline.executions[0].measured is not None
 
 
 def test_save_remote(cluster, tmp_path, bound):
