@@ -420,7 +420,7 @@ def agent(venv: str) -> int:
         requests.put(None)
 
     threading.Thread(target=receive, daemon=True).start()
-    write(AGENT + "ready")
+    write(AGENT + "ready " + json.dumps(package_versions()))
     while (request := requests.get()) is not None:
         serve(request)
     # the client is gone: the queued jobs go on, detached, to be followed
@@ -428,6 +428,33 @@ def agent(venv: str) -> int:
     with _output_lock:
         sys.stdout.flush()
     os._exit(0)
+
+
+VERSIONED = ("qibocal", "qibolab", "qibocal-widgets")
+"""Packages whose versions are reported, for profiles."""
+
+
+def package_versions() -> "dict[str, str]":
+    """Versions of the reported packages installed here, with the commit (and
+    branch) when installed from a repository."""
+    from importlib import metadata
+
+    found = {}
+    for name in VERSIONED:
+        try:
+            distribution = metadata.distribution(name)
+        except metadata.PackageNotFoundError:
+            continue
+        version = distribution.version
+        with contextlib.suppress(Exception):
+            origin = json.loads(distribution.read_text("direct_url.json") or "{}")
+            vcs = origin.get("vcs_info") or {}
+            if vcs.get("commit_id"):
+                ref = vcs.get("requested_revision")
+                commit = vcs["commit_id"][:8]
+                version += f" ({ref}@{commit})" if ref else f" ({commit})"
+        found[name] = version
+    return found
 
 
 JOBS_RETENTION = 7 * 24 * 3600

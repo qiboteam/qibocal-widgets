@@ -157,6 +157,23 @@ class Remote(Runner):
         job = {"action": "describe", "platform": self._platform(executor)}
         return transport.run(self.connection, job, compute=False)["state"]
 
+    def setup(self, executor: Executor) -> str:
+        connection = self.connection
+        if not connection.dispatched:
+            return "remote runner, passthrough (local)"
+        parts = ["remote"]
+        if connection.scheduled:
+            parts.append("srun queue" + (" through ssh" if connection.ssh else ""))
+        else:
+            parts.append("ssh, no queue")
+        if connection.agent:
+            parts.append("agent")
+            if connection.scheduled:
+                parts.append("detached")
+        else:
+            parts.append("a process per step")
+        return ", ".join(parts)
+
     def acquiring_phase(self, executor: Executor) -> str:
         """Dispatched jobs are ``queued`` (or ``starting``, without a queue),
         until the worker reports their start."""
@@ -263,6 +280,8 @@ class Remote(Runner):
         """The acquisition of a detached job, followed until its outcome (e.g.
         submitted before a restart of the kernel)."""
         job = {"action": "acquire"}
+        progress.annotate(followed=True)
+        progress.report("stage", None, "followed")
         try:
             outcome = transport.run(self.connection, job, compute=True, follow=name)
         except RemoteError as error:

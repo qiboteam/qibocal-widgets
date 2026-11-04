@@ -39,7 +39,10 @@ def test_display_protocol(widget_executor, bound):
     assert isinstance(view, widgets.VBox)
     header, widget = view.children
     heading, buttons = header.children
-    assert "fake" in heading.value and "acquired in" in heading.value
+    assert heading.title == "fake" and heading.times.startswith("acquired in")
+    # its profile, folded, ready to be copied
+    assert [step["step"] for step in heading.steps][-1] == "reporting"
+    assert heading.markdown.startswith("**fake**") and not heading.unfolded
     # update=False: offered, to apply after looking at the fit
     assert [b.label for b in buttons.children] == ["⤓ Update all targets"]
     assert isinstance(widget, widgets.Tab)

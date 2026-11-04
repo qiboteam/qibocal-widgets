@@ -253,8 +253,16 @@ time measured until the next event (for batches, this includes fetching their
 results and preparing the next one). The events are in ``pending.timeline``
 (grouped as ``pending.timeline.executions``), and the phase in
 ``pending.phase``. Capturing the estimates changes nothing in the logs.
-Where the time went is in ``pending.profile()``: each step, from the queue to
-the report, and how long it took. Outside of the acquisition itself, the
+Where the time went is in ``completed.profile()`` (and ``pending.profile()``),
+for blocking calls too: each step, from the queue to the report, and how long
+it took. Displayed executions show it folded, with a *⏱ profile* toggle next to
+their timing: it lists the steps, highlighting the longest, with buttons
+copying them, with their context, as a Markdown table (for issues), or as
+CSV. The context tells how the execution ran (local or remote, the queue, the
+agent, started for it or already warm, a job followed after a reconnection)
+and the versions of Qibocal, qibolab, and qibocal-widgets, locally and
+remotely; host names are left out. The start of the agent, once per session,
+is a step of its own. Outside of the acquisition itself, the
 imports of the remote job are often the largest part: on a network filesystem,
 on a node with a cold cache, importing qibocal, qibolab, and the drivers may
 take tens of seconds. Environments are installed with their bytecode compiled,
@@ -262,7 +270,9 @@ so that the first job does not compile it.
 
 .. code-block:: python
 
-    pending.profile()  # step, took (s), at (s since submitted)
+    completed.profile()  # step, took (s), at (s since the start)
+    completed.profile_report()  # Markdown, with the context
+    completed.profile_report("csv")
 
 Announcing the number of batches and executions in advance needs qibolab and
 Qibocal (`qibolab#1629 <https://github.com/qiboteam/qibolab/issues/1629>`_,

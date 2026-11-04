@@ -37,6 +37,11 @@ First development version, targeting the executor interface of Qibocal's
 - `pending.started_at`: when an execution started, once confirmed with
   `confirm`; times, totals and profiles count from there, not from the
   submission.
+- Profiles in the displayed executions: a *⏱ profile* toggle by the timing,
+  with the steps, and buttons copying them as Markdown or CSV, with the
+  context (setup, agent, versions; no host names). Blocking calls are
+  profiled too (`completed.profile()`, `completed.profile_report()`), and the
+  start of the remote agent is a step of its own.
 - `pending.profile()`: where the time of an execution went, step by step:
   remote jobs report their stages (out of the queue, imports, platform
   creation, connection, disconnection, encoding), also shown as phases while

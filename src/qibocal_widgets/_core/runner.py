@@ -33,6 +33,10 @@ class Runner:
         """
         return False
 
+    def setup(self, executor: Executor) -> str:
+        """How the steps run, for profiles (no host names)."""
+        return "local"
+
     def acquiring_phase(self, executor: Executor) -> str:
         """The phase of an acquisition as it begins: ``running`` here, or e.g.
         ``queued`` for jobs which report when they start."""

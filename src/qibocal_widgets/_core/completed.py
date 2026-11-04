@@ -39,6 +39,34 @@ class Completed(QibocalCompleted):
     """Its platform update, and the targets applied, if produced by an executor
     of this package (shared by its copies)."""
 
+    trace: Any = field(default=None, repr=False, compare=False)
+    """What happened during the execution, for :meth:`profile`: the pending
+    execution, or the trace of blocking calls (shared by its copies)."""
+
+    def profile(self) -> Any:
+        """Where the time went, as a table (a pandas ``DataFrame``): each step,
+        and how long it took (see ``Pending.profile``).
+
+        Raises:
+            ValueError: for executions not run by an executor of this package
+                in this kernel (e.g. loaded from disk).
+        """
+        if self.trace is None:
+            raise ValueError("No profile: not executed in this kernel")
+        from .profile import table
+
+        return table(self.trace)
+
+    def profile_report(self, fmt: str = "markdown") -> str:
+        """The profile with the context of the execution (setup, versions; no
+        host names), as Markdown, or ``"csv"``, to paste in an issue."""
+        if self.trace is None:
+            raise ValueError("No profile: not executed in this kernel")
+        from .layout import summary
+        from .profile import report
+
+        return report(self.trace, summary(self)[0], fmt)
+
     def update(self, targets: Any = None) -> list:
         """Apply the platform update of the execution, after validating its fit.
 

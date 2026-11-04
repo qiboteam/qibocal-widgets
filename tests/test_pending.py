@@ -515,3 +515,18 @@ def test_view_follows_in_place(bound):
     pending.rerun()  # unsubscribed once ended: the result replaced it
     pending.result(10)
     assert len(calls) == count
+
+
+def test_profile_view_unfolded_kept(bound):
+    """The profile stays unfolded across renderings of the same execution."""
+    pytest.importorskip("anywidget")
+    from qibocal_widgets._core.profile_view import ProfileView
+
+    runner = Gated()
+    runner.gate(bound.parameters.npoints).set()
+    pending = Executor(None, targets=TARGETS, update=False, runner=runner).submit(bound)
+    completed = pending.result(10)
+    first = ProfileView(completed, "fake", "")
+    assert first.steps and first.csv.startswith("# fake")
+    first.unfolded = True
+    assert ProfileView(completed, "fake", "").unfolded

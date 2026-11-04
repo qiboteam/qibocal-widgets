@@ -36,6 +36,7 @@ from .layout_platform import PlatformLayout
 from .middleware import Middleware
 from .output import REPORTS_DIR, default_path
 from .pending import ACQUIRING, PROCESSING, RUNNING, WAITING_EARLIER, Pending
+from .profile import Trace, versions
 from .protocols import reference, registered_name
 from .remote.worker import parameters_document
 from .runner import Local, Runner
@@ -132,6 +133,7 @@ class Executor(QibocalExecutor):
         self.frontends: list[Frontend] = _check(frontends, Frontend, "frontends")
         if session is not None and session.started and restore_platform:
             session.restore(self)
+        self._versions: dict[str, str] | None = None
         self.history = PlatformHistory.load(self)
         """The platform states of the session, as diffs: compared, and restored
         (see :class:`PlatformHistory`)."""
@@ -523,7 +525,8 @@ class Executor(QibocalExecutor):
                 pending._set(ACQUIRING)
                 if phase == RUNNING:
                     pending._event(STARTED)
-                with self, progress.reporting(pending._event, key=key):
+                pending.context.update(key=key, **self._profile_context())
+                with self, progress.reporting(pending._event, pending.context):
                     if follow is not None:
                         acquired = self.runner.follow(self, bound, follow)
                     else:
@@ -546,7 +549,9 @@ class Executor(QibocalExecutor):
             if key is not None and self.session is not None:
                 with self._records:
                     self.session.tag(recorded, key)
-            completed = self._complete(self._finish(recorded), skip_fit, pending)
+            finished = self._finish(recorded)
+            finished.trace = pending
+            completed = self._complete(finished, skip_fit, pending)
         except BaseException as exception:  # noqa: BLE001 - reported to the caller
             pending._fail(exception)
         else:
@@ -617,14 +622,47 @@ class Executor(QibocalExecutor):
             with self._records:
                 self.session.flush()
 
+    def _profile_context(self) -> dict[str, Any]:
+        """How the steps run, and the local versions, for profiles."""
+        if self._versions is None:
+            self._versions = versions()
+        return {"setup": self.runner.setup(self), "local": self._versions}
+
     def acquire(self, bound: BoundProtocol, **kwargs: Any) -> Completed:
-        completed = self._chain("acquire", bound, **kwargs)
-        return self._finish(self._record(completed))
+        trace = Trace()
+        trace.context.update(self._profile_context())
+        phase = self.runner.acquiring_phase(self)
+        trace.phase(ACQUIRING, phase)
+        if phase == RUNNING:
+            trace.event(STARTED)
+        with progress.reporting(trace.event, trace.context):
+            completed = self._chain("acquire", bound, **kwargs)
+        if trace.timeline.started is not None and trace.timeline.ended is None:
+            trace.event(ACQUIRED)
+        trace.phase(PROCESSING, "recording")
+        result = self._finish(self._record(completed))
+        result.trace = trace
+        trace.phase("idle")
+        return result
+
+    @contextmanager
+    def _traced(self, completed: Any, phase: str) -> Iterator[None]:
+        """Record a step of a blocking execution in its trace."""
+        trace = getattr(completed, "trace", None)
+        if not isinstance(trace, Trace):  # e.g. in the background: its own
+            yield
+            return
+        trace.phase(PROCESSING, phase)
+        try:
+            yield
+        finally:
+            trace.phase("idle")
 
     def fit(
         self, completed: QibocalCompleted, *, targets: Targets | None = None
     ) -> Completed:
-        fitted = self._record(self._chain("fit", completed, targets=targets))
+        with self._traced(completed, "fitting"):
+            fitted = self._record(self._chain("fit", completed, targets=targets))
         if self.session is not None:
             with self._records:
                 self.session.results(fitted)
@@ -633,14 +671,16 @@ class Executor(QibocalExecutor):
     def report(
         self, completed: QibocalCompleted, *, targets: Targets | None = None
     ) -> Completed:
-        reported = self._chain("report", completed, targets=targets)
+        with self._traced(completed, "reporting"):
+            reported = self._chain("report", completed, targets=targets)
         return self._finish(self._record(reported))
 
     def update(
         self, completed: QibocalCompleted, *, targets: Targets | None = None
     ) -> Completed:
         before = self.runner.platform_state(self)
-        updated = self._record(self._chain("update", completed, targets=targets))
+        with self._traced(completed, "updating"):
+            updated = self._record(self._chain("update", completed, targets=targets))
         if self.session is not None:
             self.session.platform(self)
         self.history._record(

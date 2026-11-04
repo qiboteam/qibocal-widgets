@@ -160,3 +160,25 @@ def test_update_on_fit_results_line(platform):
     # in Marimo, the same line holds the fit results and the button
     html = marimo_reports(completed).text
     assert html.count("flex: none") == len(TARGETS)
+
+
+def test_profile_blocking_steps(platform):
+    """Steps of a blocking execution run later show the time in between."""
+    import time
+
+    executor = Executor(platform, targets=TARGETS, update=False)
+    acquired = executor.acquire(fake(npoints=3))
+    time.sleep(0.2)  # e.g. another cell
+    fitted = executor.fit(acquired)
+    profile = fitted.profile()
+    steps = list(profile["step"])
+    assert steps == [
+        "waiting to start",
+        "acquisition",
+        "recording",
+        "between calls",
+        "fitting",
+    ]
+    assert profile["took (s)"].iloc[3] >= 0.2
+    with pytest.raises(ValueError, match="not executed"):
+        type(fitted)().profile()

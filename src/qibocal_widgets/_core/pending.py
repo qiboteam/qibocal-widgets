@@ -110,6 +110,8 @@ class Pending:
         """Views registered by frontends, keyed by display protocol."""
         self.timeline = Timeline()
         """Events of the acquisition: start, duration estimates, end."""
+        self.context: dict[str, Any] = {}
+        """Where and how it ran, for its profile (see ``Completed.profile``)."""
         self._view_state: dict[str, Any] = {}
         """State of the displayed views to keep across updates (e.g. folds)."""
         self._phase: str | None = None
@@ -372,21 +374,9 @@ class Pending:
         updating). The time between two consecutive steps is attributed to
         the later one.
         """
-        import pandas as pd
+        from .profile import table
 
-        from .profile import steps
-
-        rows = steps(self)
-        return pd.DataFrame(
-            [
-                {
-                    "step": label,
-                    "took (s)": round(took, 3),
-                    "at (s)": round((at - self._origin).total_seconds(), 3),
-                }
-                for label, at, took in rows
-            ]
-        )
+        return table(self)
 
     @property
     def batches(self) -> int:

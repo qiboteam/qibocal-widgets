@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import html
 import threading
 import time
 from collections.abc import Sequence
@@ -18,6 +17,7 @@ from .completed import MARIMO, Completed
 from .data import data_frames
 from .frontend import Frontend
 from .pending import DONE, FAILED, READY, Pending
+from .profile_view import ProfileView
 from .progress_view import ProgressView
 from .reports import Report, reports, reports_of
 
@@ -135,15 +135,8 @@ def display(
     if updates is not None and updates.available:
         buttons.append(update_button(updates))
     title, times = layout.summary(completed, total)
-    heading = mo.Html(
-        f"<span style='font-weight: 600'>{html.escape(title)}</span>"
-        + (
-            f"<span style='margin-left: 0.75em; opacity: 0.65; font-size: 0.9em'>"
-            f"{html.escape(times)}</span>"
-            if times
-            else ""
-        )
-    )
+    # with the profile, folded
+    heading = mo.ui.anywidget(ProfileView(completed, title, times))
     header = _row(heading, [mo.ui.anywidget(b) for b in buttons], align="center")
     return mo.vstack([header, _body(completed, updates)])
 

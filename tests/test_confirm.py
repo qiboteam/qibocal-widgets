@@ -308,7 +308,7 @@ def test_jupyter_run_again():
     (view,) = box.children
     header, result = view.children
     again = header.children[1].children[0]
-    assert "total" in header.children[0].value
+    assert "total" in header.children[0].times
     assert isinstance(again, Button) and again.label == "↻ Run again"
     assert isinstance(result, widgets.Tab)
     again.click()

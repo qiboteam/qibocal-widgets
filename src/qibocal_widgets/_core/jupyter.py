@@ -6,7 +6,6 @@ Jupyter renderers of pandas and Plotly.
 
 from __future__ import annotations
 
-import html
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +19,7 @@ from .completed import MIMEBUNDLE, Completed
 from .data import data_frames
 from .frontend import Frontend
 from .pending import DONE, FAILED, READY, Pending
+from .profile_view import ProfileView
 from .progress_view import ProgressView
 from .reports import Report, reports, reports_of
 
@@ -172,15 +172,8 @@ def display(
     if updates is not None and updates.available:
         buttons.append(update_button(updates))
     title, times = layout.summary(completed, total)
-    heading = widgets.HTML(
-        f"<b>{html.escape(title)}</b>"
-        + (
-            f"<span style='margin-left: 0.75em; opacity: 0.65; font-size: 0.9em'>"
-            f"{html.escape(times)}</span>"
-            if times
-            else ""
-        )
-    )
+    # with the profile, folded
+    heading = ProfileView(completed, title, times)
     header = _row(heading, buttons, align="center")
     return widgets.VBox([header, _body(completed, updates)])
 

@@ -344,6 +344,9 @@ class Agent:
         self._jobs: dict[str, queue.Queue[str | None]] = {}
         self._ids = itertools.count()
         self._ready = threading.Event()
+        self.versions: dict[str, str] = {}
+        """Versions of the packages of the remote environment."""
+        self.started = time.monotonic()
         self._error: str | None = None
         self._errors: collections.deque[str] = collections.deque(maxlen=200)
         threading.Thread(target=self._read, daemon=True).start()
@@ -375,7 +378,9 @@ class Agent:
             if not line.startswith(worker.AGENT):
                 continue
             rest = line[len(worker.AGENT) :]
-            if rest == "ready":
+            if rest == "ready" or rest.startswith("ready "):
+                with contextlib.suppress(ValueError):
+                    self.versions = json.loads(rest[len("ready ") :] or "{}")
                 self._ready.set()
             elif rest.startswith("missing "):
                 self._error = json.loads(rest[len("missing ") :])
@@ -479,12 +484,21 @@ _agents_lock = threading.Lock()
 
 
 def agent(connection: Connection) -> Agent:
-    """The agent of a connection, started if needed (or again, if it died)."""
+    """The agent of a connection, started if needed (or again, if it died).
+
+    Starting it is reported to the acquisition of the current thread, if any,
+    as a step of its own (``agent ready``): once per session.
+    """
     key = connection.model_dump_json()
     with _agents_lock:
         found = _agents.get(key)
         if found is None or not found.alive:
             found = _agents[key] = Agent(connection)
+            progress.report("stage", None, "agent ready")
+            progress.annotate(agent="started for this step")
+        elif progress.current("agent") is None:
+            progress.annotate(agent="warm")
+        progress.annotate(remote=found.versions)
         return found
 
 

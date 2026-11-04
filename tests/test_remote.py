@@ -898,3 +898,36 @@ def test_failed_job_forgotten(cluster, tmp_path):
         executor.submit(local(), reuse=True).result(30)
     assert not (path / "remote-jobs.json").exists()
     assert not any(_jobs_folder(tmp_path).iterdir())
+
+
+def test_profile_report(cluster):
+    """Blocking calls are profiled too; reports carry their context."""
+    from qibocal import protocols
+
+    executor = Executor(
+        None,
+        targets=TARGETS,
+        update=False,
+        runner=Remote(ssh="me@login", queue="chip", platform="mock"),
+    )
+    bound = protocols.ramsey_signal(
+        delay_between_pulses_start=10,
+        delay_between_pulses_end=100,
+        delay_between_pulses_step=30,
+    )
+    first = executor(bound)
+    steps = list(first.profile()["step"])
+    assert steps[0] == "agent start (once per session)"
+    assert "fitting" in steps and "reporting" in steps
+    second = executor(bound)
+    assert "agent start (once per session)" not in list(second.profile()["step"])
+    report = second.profile_report()
+    print(first.profile_report())
+    assert (
+        "setup: remote, srun queue through ssh, agent, detached, agent warm" in report
+    )
+    assert "local: qibocal" in report and "remote: qibocal" in report
+    assert "login" not in report  # no host names
+    assert report.count("\n|") >= len(second.profile()) + 2
+    csv = second.profile_report("csv")
+    assert csv.startswith("# ramsey_signal") and "step,took (s),at (s)" in csv
