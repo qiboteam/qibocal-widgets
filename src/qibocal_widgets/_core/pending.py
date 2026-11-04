@@ -15,7 +15,7 @@ from qibocal.auto.operation import BoundProtocol
 
 from .completed import MARIMO, MIMEBUNDLE, Completed, View
 from .protocols import reference
-from .timeline import ACQUIRED, BATCH, EXECUTION, STARTED, Event, Timeline
+from .timeline import ACQUIRED, BATCH, EXECUTION, STAGE, STARTED, Event, Timeline
 
 __all__ = ["Estimate", "NotStartedError", "Pending"]
 
@@ -58,6 +58,13 @@ RUNNING = "running"
 """Acquiring: running."""
 TRANSFERRING = "transferring"
 """Acquiring: acquired remotely, receiving the data."""
+STAGE_PHASES = {
+    "environment started": "importing",
+    "imported": "creating the platform",
+    "platform created": "connecting",
+    "connected": "preparing",
+}
+"""Phases following the stages of remote jobs, until the first estimate."""
 WAITING_EARLIER = "waiting for earlier executions"
 """Processing: earlier submissions are processed first."""
 
@@ -102,9 +109,9 @@ class Pending:
         """Events of the acquisition: start, duration estimates, end."""
         self._view_state: dict[str, Any] = {}
         """State of the displayed views to keep across updates (e.g. folds)."""
-        self.phase: str | None = None
-        """What the execution is doing, within its status (e.g. ``queued`` or
-        ``fitting``)."""
+        self._phase: str | None = None
+        self.history: list[tuple[datetime, str, str | None]] = []
+        """Changes of status and phase, with their times (UTC), for profiling."""
         self.overrides: dict[str, Any] = {}
         """Execution overrides (e.g. ``targets``), as given to ``submit``."""
         self._status = READY
@@ -162,7 +169,8 @@ class Pending:
             self.submitted_at = datetime.now(UTC)
             self.finished_at = None
             self.timeline = Timeline()
-            self.phase = None
+            self._phase = None
+            self.history = []
             self._launcher = self._rerun
             self._status = WAITING
         self._restarted()
@@ -206,8 +214,20 @@ class Pending:
 
         return remove
 
+    @property
+    def phase(self) -> str | None:
+        """What the execution is doing, within its status (e.g. ``queued``,
+        ``importing``, or ``fitting``)."""
+        return self._phase
+
+    @phase.setter
+    def phase(self, phase: str | None) -> None:
+        self._phase = phase
+        self.history.append((datetime.now(UTC), self._status, phase))
+
     def _set(self, status: str) -> None:
         self._status = status
+        self.history.append((datetime.now(UTC), status, self._phase))
         self._notify()
 
     def _notify(self) -> None:
@@ -226,10 +246,16 @@ class Pending:
             if event.kind in (EXECUTION, BATCH)
         ]
 
-    def _event(self, kind: str, seconds: float | None = None) -> None:
+    def _event(
+        self, kind: str, seconds: float | None = None, name: str | None = None
+    ) -> None:
         """Record an event of the acquisition (from the acquiring thread)."""
-        self.timeline.events.append(Event(kind, datetime.now(UTC), seconds))
-        if kind in (STARTED, EXECUTION, BATCH) and self.phase != RUNNING:
+        self.timeline.events.append(Event(kind, datetime.now(UTC), seconds, name))
+        if kind == STAGE and name in STAGE_PHASES and self.phase != TRANSFERRING:
+            self.phase = STAGE_PHASES[name]
+        elif kind == STARTED and self.phase in (None, QUEUED, STARTING):
+            self.phase = STARTING
+        elif kind in (EXECUTION, BATCH) and self.phase != RUNNING:
             self.phase = RUNNING
         elif kind == ACQUIRED and self._status == ACQUIRING:
             self.phase = TRANSFERRING
@@ -324,6 +350,32 @@ class Pending:
             return f"{self.name}: ready, waiting for confirmation"
         state = self._status if self.phase is None else f"{self._status}, {self.phase}"
         return f"{self.name}: {state}, submitted at {self.submitted_at:%H:%M:%S} UTC"
+
+    def profile(self) -> Any:
+        """Where the time went, as a table (a pandas ``DataFrame``): each step,
+        and how long it took to reach it, from the submission.
+
+        Remote jobs report their stages (out of the queue, imports, platform
+        creation, connection, the executions, disconnection, encoding), and
+        the executor its own (transfer, recording, fitting, reporting,
+        updating). The time between two consecutive steps is attributed to
+        the later one.
+        """
+        import pandas as pd
+
+        from .profile import steps
+
+        rows = steps(self)
+        return pd.DataFrame(
+            [
+                {
+                    "step": label,
+                    "took (s)": round(took, 3),
+                    "at (s)": round((at - self.submitted_at).total_seconds(), 3),
+                }
+                for label, at, took in rows
+            ]
+        )
 
     @property
     def batches(self) -> int:

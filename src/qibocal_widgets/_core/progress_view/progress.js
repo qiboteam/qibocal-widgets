@@ -252,7 +252,7 @@ function render({ model, el }) {
     const processing = status === "processing";
     indicator.className = `qw-indicator qw-${processing ? "processing" : status === "waiting" ? "waiting" : "acquiring"}`;
     phase.className = `qw-phase qw-${processing ? "processing" : "acquiring"}`;
-    phase.textContent = processing ? name || "processing" : PHASES[name] || PHASES[status] || status;
+    phase.textContent = processing ? name || "processing" : PHASES[name] || name || PHASES[status] || status;
     const kind = layout();
     if (kind !== built) build(kind);
     if (labels.execution) {

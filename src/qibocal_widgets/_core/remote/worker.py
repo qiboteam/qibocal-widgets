@@ -114,10 +114,21 @@ def emit_estimate(seconds: float, kind: str) -> None:
     emit_event(kind, seconds)
 
 
-def emit_event(kind: str, seconds: "float | None" = None) -> None:
-    """Write an event line: ``started``, ``acquired``, or an estimate."""
-    sys.stdout.write(PROGRESS + json.dumps({"kind": kind, "estimate": seconds}) + "\n")
+def emit_event(
+    kind: str, seconds: "float | None" = None, name: "str | None" = None
+) -> None:
+    """Write an event line: ``started``, ``acquired``, a ``stage`` (with its
+    ``name``), or an estimate."""
+    event = {"kind": kind, "estimate": seconds}
+    if name is not None:
+        event["name"] = name
+    sys.stdout.write(PROGRESS + json.dumps(event) + "\n")
     sys.stdout.flush()
+
+
+def stage(name: str) -> None:
+    """Report that a stage of the job was reached, for profiling."""
+    emit_event("stage", name=name)
 
 
 # -- environments ------------------------------------------------------------
@@ -194,8 +205,18 @@ def install(job: dict) -> dict:
         file.write(requirements)
     try:
         if uv is not None:
+            # compiled now, rather than by the first job (pip does it anyway)
             run_installer(
-                [uv, "pip", "install", "--python", str(python), "-r", file.name]
+                [
+                    uv,
+                    "pip",
+                    "install",
+                    "--compile-bytecode",
+                    "--python",
+                    str(python),
+                    "-r",
+                    file.name,
+                ]
             )
         else:
             run_installer([str(python), "-m", "pip", "install", "-r", file.name])
@@ -336,22 +357,27 @@ def _jsonable(obj):
 
 def acquire(job: dict) -> dict:
     """Acquire data on the connected platform."""
-    emit_event("started")  # e.g. out of the queue
+    stage("environment started")
     from qibocal import Executor
 
+    stage("imported")
     bound = bind(job)
     created = platform(job)
     executor = Executor(created, targets=job["targets"], update=False)
+    stage("platform created")
     created.connect()
+    stage("connected")
     try:
         with estimates(emit_estimate):
             completed = executor.acquire(bound, **job.get("overrides", {}))
     finally:
+        emit_event("acquired")  # the data follow
         created.disconnect()
-    emit_event("acquired")  # the data follow
+        stage("disconnected")
     with tempfile.TemporaryDirectory() as folder:
         completed.data.save(Path(folder))
         files = encode(Path(folder))
+    stage("encoded")
     return {
         "files": files,
         "data_time": completed.data_time,
@@ -505,6 +531,8 @@ def main() -> int:
             emit({"ok": True, **install(job)})
             return 0
         if os.environ.get(GUARD) != "1":
+            if action == "acquire":
+                emit_event("started")  # out of the queue, if any
             return delegate(job, text)
         emit({"ok": True, **ACTIONS[action](job)})
         return 0

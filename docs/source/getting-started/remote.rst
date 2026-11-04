@@ -191,8 +191,10 @@ cells do not run again by themselves, as usual in Jupyter.
 **Progress.** While running, a pending execution shows what it is doing, and
 how long it has been since submitted:
 
-- acquiring: *queued* (remote jobs, until they reach their node), *starting*,
-  *running*, *receiving the data* (remote jobs, once acquired);
+- acquiring: *queued* (remote jobs, until they reach their node), then, for
+  remote jobs, *starting*, *importing*, *creating the platform*,
+  *connecting*, *preparing* (until the first execution on the platform),
+  then *running*, and *receiving the data* (remote jobs, once acquired);
 - processing, with a different indicator: *waiting for earlier executions*
   (processed in order), *recording*, *fitting*, *reporting*, *updating*.
 
@@ -213,6 +215,17 @@ time measured until the next event (for batches, this includes fetching their
 results and preparing the next one). The events are in ``pending.timeline``
 (grouped as ``pending.timeline.executions``), and the phase in
 ``pending.phase``. Capturing the estimates changes nothing in the logs.
+Where the time went is in ``pending.profile()``: each step, from the queue to
+the report, and how long it took. Outside of the acquisition itself, the
+imports of the remote job are often the largest part: on a network filesystem,
+on a node with a cold cache, importing qibocal, qibolab, and the drivers may
+take tens of seconds. Environments are installed with their bytecode compiled,
+so that the first job does not compile it.
+
+.. code-block:: python
+
+    pending.profile()  # step, took (s), at (s since submitted)
+
 Announcing the number of batches and executions in advance needs qibolab and
 Qibocal (`qibolab#1629 <https://github.com/qiboteam/qibolab/issues/1629>`_,
 `qibocal#1768 <https://github.com/qiboteam/qibocal/issues/1768>`_).

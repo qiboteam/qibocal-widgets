@@ -21,9 +21,9 @@ _current = threading.local()
 
 
 @contextmanager
-def reporting(callback: Callable[[str, float | None], None]) -> Iterator[None]:
+def reporting(callback: Callable[..., None]) -> Iterator[None]:
     """Pass the events of the acquisitions in the current thread to
-    ``callback(kind, seconds)``.
+    ``callback(kind, seconds, name)`` (``name`` for ``stage`` events).
 
     Both the estimates logged in this thread, and the events reported with
     :func:`report` (e.g. received from a remote worker).
@@ -37,9 +37,9 @@ def reporting(callback: Callable[[str, float | None], None]) -> Iterator[None]:
         _current.callback = previous
 
 
-def report(kind: str, seconds: float | None = None) -> None:
+def report(kind: str, seconds: float | None = None, name: str | None = None) -> None:
     """Report an event (see :mod:`.timeline`), with its estimate if any, to the
     callback of the current thread, if any."""
     callback = getattr(_current, "callback", None)
     if callback is not None:
-        callback(kind, seconds)
+        callback(kind, seconds, name)

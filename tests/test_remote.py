@@ -639,7 +639,9 @@ def test_queued(cluster, monkeypatch, bound):
     phases = [pending.phase]
     pending.on_change(lambda p: phases.append(p.phase))
     pending.result(60)
-    assert phases.index("queued") < phases.index("running")
+    # then the stages of the job, until the first estimate (none here)
+    assert phases.index("queued") < phases.index("starting")
+    assert phases.index("starting") < phases.index("importing")
 
 
 def test_estimates_streamed(cluster, monkeypatch):
@@ -660,7 +662,7 @@ def test_estimates_streamed(cluster, monkeypatch):
     assert [e.seconds for e in pending.estimates] == list(ESTIMATES)
     assert [e.kind for e in pending.estimates] == ["execution", "batch"]
     # from the worker: when the job left the queue, and when it acquired
-    kinds = [event.kind for event in pending.timeline.events]
+    kinds = [e.kind for e in pending.timeline.events if e.kind != "stage"]
     assert kinds == ["started", "execution", "batch", "acquired"]
     assert phases.index("running") < phases.index("transferring")
     assert pending.timeline.executions[0].measured is not None
@@ -701,3 +703,44 @@ def test_describe_platform_remote(cluster, bound):
     executor.acquire(bound)
     configs = json.loads(remote.state["parameters"])["configs"]
     assert configs["0/drive_lo"]["frequency"] == 4.3e9
+
+
+def test_profile(cluster):
+    """Remote jobs report their stages: where the time went."""
+    from qibocal import protocols
+
+    executor = Executor(
+        None,
+        targets=TARGETS,
+        update=False,
+        runner=Remote(queue="chip", platform="mock"),
+    )
+    bound = protocols.ramsey_signal(
+        delay_between_pulses_start=10,
+        delay_between_pulses_end=100,
+        delay_between_pulses_step=30,
+    )
+    phases = []
+    pending = executor.submit(bound)
+    pending.on_change(lambda p: phases.append(p.phase))
+    pending.result(60)
+    for phase in ("importing", "creating the platform", "connecting", "preparing"):
+        assert phase in phases
+    profile = pending.profile()
+    steps = list(profile["step"])
+    for step in (
+        "queue and dispatch (ssh, srun)",
+        "start of Python, in the environment",
+        "imports (qibocal, qibolab, drivers)",
+        "platform creation",
+        "connection to the instruments",
+        "disconnection",
+        "data encoding",
+        "data transfer and decoding",
+        "fitting",
+        "reporting",
+    ):
+        assert step in steps, step
+    total = (pending.finished_at - pending.submitted_at).total_seconds()
+    assert abs(profile["took (s)"].sum() - total) < 0.05  # it all adds up
+    print(profile.to_string())

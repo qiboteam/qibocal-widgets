@@ -23,7 +23,9 @@ BATCH = "batch"
 """A batch of the current execution starting, with the driver's estimate."""
 ACQUIRED = "acquired"
 """The acquisition ended (remotely: its data are being transferred)."""
-KINDS = (STARTED, EXECUTION, BATCH, ACQUIRED)
+STAGE = "stage"
+"""A stage of a remote job reached (e.g. ``imported``), with its name."""
+KINDS = (STARTED, EXECUTION, BATCH, ACQUIRED, STAGE)
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,8 @@ class Event:
     """When it was received (UTC)."""
     seconds: float | None = None
     """The estimated duration, for ``execution`` and ``batch`` events."""
+    name: str | None = None
+    """The stage reached, for ``stage`` events."""
 
 
 @dataclass(frozen=True)
@@ -141,7 +145,12 @@ class Timeline:
     def document(self) -> list[dict[str, Any]]:
         """The events, as JSON values (times in seconds since the epoch)."""
         return [
-            {"kind": e.kind, "at": e.at.timestamp(), "seconds": e.seconds}
+            {
+                "kind": e.kind,
+                "at": e.at.timestamp(),
+                "seconds": e.seconds,
+                "name": e.name,
+            }
             for e in self.events
         ]
 

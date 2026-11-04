@@ -24,6 +24,11 @@ First development version, targeting the executor interface of Qibocal's
   or streamed back by remote workers, with the estimates and measured times
   of all of them (`Pending.timeline`, `Pending.phase`). The view updates in
   place, with fixed-width numbers, so that only values change.
+- `pending.profile()`: where the time of an execution went, step by step:
+  remote jobs report their stages (out of the queue, imports, platform
+  creation, connection, disconnection, encoding), also shown as phases while
+  running, and the executor its own (transfer, recording, fitting,
+  reporting). Remote environments are installed with compiled bytecode.
 - Executions show a header line: the protocol, how long the acquisition and
   the fit took (and the total, since submitted, for background executions),
   and, on the right, the *Run again* and *Update* buttons; each target's

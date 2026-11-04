@@ -198,6 +198,7 @@ def run(connection: Connection, job: dict, *, compute: bool) -> dict:
                     progress.report(
                         str(event.get("kind", "execution")),
                         None if seconds is None else float(seconds),
+                        event.get("name"),
                     )
         process.wait()
     finally:
