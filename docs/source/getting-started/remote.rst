@@ -29,8 +29,9 @@ Options                                 Steps needing the instruments
 ======================================  ======================================
 none                                    run in the current process (already on
                                         the compute node): nothing dispatched
-``queue`` and/or ``slurm``              one blocking ``srun`` job per step,
-                                        from the current machine (access node)
+``queue`` and/or ``slurm``              one blocking ``srun`` job per
+                                        acquisition, from the current machine
+                                        (access node)
 ``ssh``                                 the same, through SSH (laptop to
                                         access node); without ``queue``, steps
                                         run on the SSH destination itself
@@ -52,6 +53,43 @@ so jobs are independent, as SLURM requires.
 Since the passthrough tier changes nothing, the same notebook works everywhere:
 select the connection with the ``QIBOCAL_WIDGETS_CONNECTION`` environment
 variable and use ``Remote()``.
+
+Never holding the queue
+-----------------------
+
+A :class:`~qibocal_widgets.remote.Remote` session never holds the SLURM queue
+between acquisitions: each acquisition is a job of its own, holding its
+allocation only while it runs. The instruments are shared, and a notebook
+session idles most of the time (looking at plots, editing cells), so holding
+them for the whole session would block everybody else for nothing.
+
+This is a deliberate design choice, with consequences:
+
+- every acquisition starts a fresh process on the compute node, which imports
+  Qibocal, qibolab, and the drivers again (on a network filesystem, with cold
+  caches, this may take seconds: see ``pending.profile()``);
+- the instruments are connected and disconnected by every acquisition: they
+  cannot stay connected between jobs.
+
+What does not need the instruments stays warm instead. A runner starts an
+*agent* on the remote machine, once, over a single SSH connection, outside of
+the queue (on the access node). It imports Qibocal once and serves every step:
+updates, platform states, layouts, and saves run in it at once, with no new
+connection and no new process; acquisitions through the queue are launched by
+it as ``srun`` jobs, straight in the environment's interpreter. Without a
+queue (``ssh`` only), acquisitions run in the agent itself, one at a time. The
+agent exits with the notebook: when its connection closes, it stops the jobs
+it launched, and leaves nothing behind. ``agent=False`` in the connection
+starts a process of its own for every step instead.
+
+**When the queue should be held.** If a session needs the instruments for
+itself, and the start-up of every job matters, reserve the node for the whole
+session explicitly: run the notebook server itself on the compute node (in a
+SLURM allocation), with the connection's passthrough tier (no ``ssh``, no
+``queue``). Everything then runs in the kernel, next to the instruments, and
+the network carries only what the notebook already exchanges: cell edits and
+displayed results. Holding the queue is then visible, and a choice of the
+user, rather than a side effect of a library.
 
 Connections
 -----------
@@ -287,8 +325,8 @@ Alternatively, in Marimo only, set the runtime to mark dependent cells as stale
 instead of running them (``on_cell_change = "lazy"``, in the notebook settings
 or under ``[tool.marimo.runtime]`` in ``pyproject.toml``).
 
-The job is held by a background thread and an open SSH connection: the kernel
-and the connection must stay alive until it completes. Detached jobs,
+The job is held by a background thread and the agent's SSH connection: the
+kernel and the connection must stay alive until it completes. Detached jobs,
 surviving disconnections and restarts, are planned
 (`#8 <https://github.com/qiboteam/qibocal-widgets/issues/8>`_).
 

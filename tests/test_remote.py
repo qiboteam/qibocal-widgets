@@ -56,7 +56,7 @@ os.execvp("sh", ["sh", "-c", args[-1]])
 FAKE_SRUN = """
 import json, os, sys, time
 args = sys.argv[1:]
-index = args.index("python3")
+index = args.index("-u") - 1  # the interpreter: python3, or the environment's
 with open(os.environ["FAKE_LOG"], "a") as log:
     log.write(json.dumps({"tool": "srun", "args": args[:index]}) + "\\n")
 if "FAKE_STARTS" in os.environ:
@@ -113,7 +113,8 @@ def cluster(tmp_path, monkeypatch):
             return []
         return [json.loads(line) for line in log.read_text().splitlines()]
 
-    return calls
+    yield calls
+    transport.close_agents()  # started in this test's environment
 
 
 @pytest.fixture
@@ -338,9 +339,9 @@ def test_remote_update_state(bound, cluster, mock_frequency):
     completed = executor(bound)
     assert completed.data.scale == {0: mock_frequency[0]}
 
-    # the update ran on the access node, outside of the queue, after asking
-    # the state it starts from, once (for the history)
-    assert [call["tool"] for call in cluster()] == ["ssh", "srun", "ssh", "ssh"]
+    # a single connection, the agent's: the acquisition through the queue,
+    # the update in the agent, on the access node, outside of the queue
+    assert [call["tool"] for call in cluster()] == ["ssh", "srun"]
     peak = completed.results.peak[0]
     drive = create_calibration_platform("mock").qubits[0].drive
     parameters = json.loads(remote.state["parameters"])
@@ -358,7 +359,8 @@ def test_remote_update_approved(bound, cluster, mock_frequency):
     completed = executor(bound)
     assert [call["tool"] for call in cluster()] == ["ssh", "srun"]
     assert completed.update([1]) == [1]
-    assert [call["tool"] for call in cluster()][-1] == "ssh"
+    # served by the agent: neither a new connection, nor the queue
+    assert [call["tool"] for call in cluster()] == ["ssh", "srun"]
     drives = {t: create_calibration_platform("mock").qubits[t].drive for t in TARGETS}
     configs = json.loads(remote.state["parameters"])["configs"]
     assert configs[drives[1]]["frequency"] == completed.results.peak[1] * 1e9
@@ -679,7 +681,8 @@ def test_save_remote(cluster, tmp_path, bound):
     completed = executor(bound)
     path = executor.platform_state.save(overwrite=True)
     assert path == str(folder / "mock")
-    assert [call["tool"] for call in cluster()][-1] == "ssh"  # not queued
+    # served by the agent, on the access node: no new connection, not queued
+    assert [call["tool"] for call in cluster()] == ["ssh", "srun"]
     parameters = json.loads((folder / "mock" / "parameters.json").read_text())
     drive = create_calibration_platform("mock").qubits[0].drive
     assert parameters["configs"][drive]["frequency"] == completed.results.peak[0] * 1e9
@@ -744,3 +747,56 @@ def test_profile(cluster):
     total = (pending.finished_at - pending.submitted_at).total_seconds()
     assert abs(profile["took (s)"].sum() - total) < 0.05  # it all adds up
     print(profile.to_string())
+
+
+# -- agent ---------------------------------------------------------------------------
+
+
+def test_agent_warm(cluster):
+    """Without a queue, acquisitions run in the warm agent: imports done once."""
+    executor = Executor(
+        None,
+        targets=TARGETS,
+        update=False,
+        runner=Remote(ssh="me@login", platform="mock"),
+    )
+    bound = protocols.ramsey_signal(
+        delay_between_pulses_start=10,
+        delay_between_pulses_end=100,
+        delay_between_pulses_step=30,
+    )
+    first = executor.submit(bound)
+    first.result(60)
+    second = executor.submit(bound)
+    second.result(60)
+    assert [call["tool"] for call in cluster()] == ["ssh"]  # one connection
+    for pending in (first, second):
+        steps = dict(zip(*pending.profile()[["step", "took (s)"]].T.values))
+        assert steps["imports (qibocal, qibolab, drivers)"] < 0.1  # already done
+
+
+def test_agent_restarted(cluster, bound):
+    remote = Remote(ssh="me@login", queue="chip", platform="mock")
+    executor = Executor(None, targets=TARGETS, update=False, runner=remote)
+    executor.acquire(bound)
+    agent = transport.agent(remote.connection)
+    agent._process.kill()
+    agent._process.wait()
+    executor.acquire(bound)  # a new agent
+    assert [call["tool"] for call in cluster()] == ["ssh", "srun", "ssh", "srun"]
+
+
+def test_agent_exits_with_client(cluster, bound):
+    remote = Remote(ssh="me@login", queue="chip", platform="mock")
+    Executor(None, targets=TARGETS, update=False, runner=remote).acquire(bound)
+    agent = transport.agent(remote.connection)
+    transport.close_agents()
+    assert agent._process.poll() is not None  # nothing left behind
+
+
+def test_without_agent(cluster, bound):
+    """With ``agent=False``, every step is a process of its own, as before."""
+    remote = Remote(ssh="me@login", queue="chip", platform="mock", agent=False)
+    executor = Executor(None, targets=TARGETS, update=True, runner=remote)
+    executor(bound)
+    assert [call["tool"] for call in cluster()] == ["ssh", "srun", "ssh", "ssh"]

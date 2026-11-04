@@ -24,6 +24,12 @@ First development version, targeting the executor interface of Qibocal's
   or streamed back by remote workers, with the estimates and measured times
   of all of them (`Pending.timeline`, `Pending.phase`). The view updates in
   place, with fixed-width numbers, so that only values change.
+- Remote agents: a warm worker per runner, started once over a single SSH
+  connection, outside of the queue, serving every step (updates, states,
+  layouts, saves at once; acquisitions through the queue as `srun` jobs, or,
+  without a queue, in the agent itself); it exits with the notebook. The
+  queue is never held between acquisitions (`agent=False` for a process per
+  step).
 - `pending.started_at`: when an execution started, once confirmed with
   `confirm`; times, totals and profiles count from there, not from the
   submission.

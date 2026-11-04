@@ -93,6 +93,9 @@ class Connection(BaseModel):
     """
     timeout: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     """Maximum duration of a remote step, in seconds, queue time included."""
+    agent: bool = True
+    """Serve the steps by a warm agent on the remote machine, started once,
+    outside of the queue; otherwise, every step starts a process of its own."""
 
     @property
     def dispatched(self) -> bool:

@@ -7,20 +7,35 @@ worker's standard input, and the outcome read from its standard output.
 
 from __future__ import annotations
 
+import atexit
+import collections
 import contextlib
+import itertools
 import json
 import os
+import queue
 import shlex
 import signal
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 from .. import progress
 from . import worker
 from .config import Connection
 
-__all__ = ["RemoteError", "command", "run", "slurm_arguments", "source"]
+__all__ = [
+    "Agent",
+    "RemoteError",
+    "agent",
+    "close_agents",
+    "command",
+    "run",
+    "run_once",
+    "slurm_arguments",
+    "source",
+]
 
 SSH_OPTIONS = [
     "-T",
@@ -116,19 +131,35 @@ def command(
     """
     inner = ["python3", "-u", "-c", source()]
     if compute and connection.scheduled:
-        srun = ["srun", "--unbuffered"]
-        if connection.queue is not None:
-            srun += ["--partition", connection.queue]
-        extra = slurm_arguments(connection.slurm)
-        named = any(
-            argument == "-J" or argument.split("=", 1)[0] == "--job-name"
-            for argument in extra
-        )
-        if not named:
-            srun += ["--job-name", f"{JOB_PREFIX}{action}"]
-        srun += extra
-        srun += ["--nodes=1", "--ntasks=1"]
-        inner = srun + inner
+        inner = srun_prefix(connection, action) + inner
+    return wrap(connection, inner)
+
+
+def srun_prefix(connection: Connection, action: str = "step") -> list[str]:
+    """The ``srun`` command of a queued job, before the command it runs.
+
+    One task on one node, named ``qibocal-widgets-<action>`` unless the
+    ``slurm`` options name it. Blocking: the allocation lasts as long as the
+    job, and no longer.
+    """
+    srun = ["srun", "--unbuffered"]
+    if connection.queue is not None:
+        srun += ["--partition", connection.queue]
+    extra = slurm_arguments(connection.slurm)
+    named = any(
+        argument == "-J" or argument.split("=", 1)[0] == "--job-name"
+        for argument in extra
+    )
+    if not named:
+        srun += ["--job-name", f"{JOB_PREFIX}{action}"]
+    srun += extra
+    srun += ["--nodes=1", "--ntasks=1"]
+    return srun
+
+
+def wrap(connection: Connection, inner: list[str]) -> list[str]:
+    """A command line run on the remote machine: through SSH, in the working
+    directory, if configured."""
     if connection.ssh is None:
         if connection.workdir is not None:
             return [
@@ -151,6 +182,18 @@ def _kill(process: subprocess.Popen) -> None:
 
 
 def run(connection: Connection, job: dict, *, compute: bool) -> dict:
+    """Execute a job remotely, through the connection's agent (see
+    :class:`Agent`), or, for installations, or with ``agent=False``, in a
+    process of its own (see :func:`run_once`)."""
+    job = {"venv": connection.venv, **job}
+    if connection.platforms_dir is not None:
+        job.setdefault("platforms_dir", connection.platforms_dir)
+    if connection.agent and job["action"] != "install":
+        return agent(connection).run(job, compute=compute)
+    return run_once(connection, job, compute=compute)
+
+
+def run_once(connection: Connection, job: dict, *, compute: bool) -> dict:
     """Execute a job remotely, and return its outcome.
 
     Events streamed by the worker (duration estimates, start and end of the
@@ -192,14 +235,7 @@ def run(connection: Connection, job: dict, *, compute: bool) -> dict:
             if line.startswith(worker.MARKER):
                 outcome = json.loads(line[len(worker.MARKER) :])
             elif line.startswith(worker.PROGRESS):
-                with contextlib.suppress(ValueError, KeyError, TypeError):
-                    event = json.loads(line[len(worker.PROGRESS) :])
-                    seconds = event.get("estimate")
-                    progress.report(
-                        str(event.get("kind", "execution")),
-                        None if seconds is None else float(seconds),
-                        event.get("name"),
-                    )
+                _progress(line)
         process.wait()
     finally:
         if timer is not None:
@@ -218,9 +254,199 @@ def run(connection: Connection, job: dict, *, compute: bool) -> dict:
             "and no outcome",
             "".join(errors),
         )
+    return _outcome(job, outcome, "".join(errors))
+
+
+def _progress(line: str) -> None:
+    """Report an event line of the worker."""
+    with contextlib.suppress(ValueError, KeyError, TypeError):
+        event = json.loads(line[len(worker.PROGRESS) :])
+        seconds = event.get("estimate")
+        progress.report(
+            str(event.get("kind", "execution")),
+            None if seconds is None else float(seconds),
+            event.get("name"),
+        )
+
+
+def _outcome(job: dict, outcome: dict, errors: str) -> dict:
+    """The outcome of a job, raising its failure."""
     if not outcome.get("ok"):
         raise RemoteError(
             f"Remote {job['action']} failed: {outcome.get('error')}",
-            outcome.get("traceback") or "".join(errors),
+            outcome.get("traceback") or errors,
         )
     return outcome
+
+
+# -- agents ------------------------------------------------------------------------
+
+
+EXITED = "The remote agent exited"
+
+
+class Agent:
+    """A warm worker on the remote machine, outside of the queue.
+
+    Started once per connection, it serves every job (see
+    :func:`~.worker.agent`): jobs not needing the instruments at once, with
+    imports done once; acquisitions through the queue as ``srun`` jobs, each
+    holding its allocation only while it runs. It lives as long as its
+    process (its SSH connection, if any): it exits with the client.
+    """
+
+    STARTUP = 600.0
+    """Seconds to wait for the agent to start (imports included)."""
+
+    def __init__(self, connection: Connection):
+        self.connection = connection
+        command = wrap(
+            connection, ["python3", "-u", "-c", source(), "agent", connection.venv]
+        )
+        self._process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            start_new_session=True,
+        )
+        self._lock = threading.Lock()
+        self._jobs: dict[str, queue.Queue[str | None]] = {}
+        self._ids = itertools.count()
+        self._ready = threading.Event()
+        self._error: str | None = None
+        self._errors: collections.deque[str] = collections.deque(maxlen=200)
+        threading.Thread(target=self._read, daemon=True).start()
+        self._stderr = threading.Thread(
+            target=lambda: self._errors.extend(self._process.stderr), daemon=True
+        )
+        self._stderr.start()
+        if not self._ready.wait(self.STARTUP) or not self.alive:
+            self.close()
+            self._stderr.join(1)
+            code = self._process.returncode
+            reason = self._error
+            if reason is None or reason == EXITED:
+                reason = (
+                    "The remote agent did not start"
+                    if code is None
+                    else f"The remote agent exited with code {code}"
+                )
+            raise RemoteError(reason, "".join(self._errors))
+
+    @property
+    def alive(self) -> bool:
+        """Whether the agent can still serve jobs."""
+        return self._process.poll() is None and self._error is None
+
+    def _read(self) -> None:
+        for line in self._process.stdout:
+            line = line.rstrip("\n")
+            if not line.startswith(worker.AGENT):
+                continue
+            rest = line[len(worker.AGENT) :]
+            if rest == "ready":
+                self._ready.set()
+            elif rest.startswith("missing "):
+                self._error = json.loads(rest[len("missing ") :])
+                self._ready.set()
+            else:
+                job, _, payload = rest.partition(" ")
+                with self._lock:
+                    channel = self._jobs.get(job)
+                if channel is not None:
+                    channel.put(payload)
+        # gone: the jobs in flight are lost
+        self._error = self._error or EXITED
+        self._ready.set()
+        with self._lock:
+            channels = list(self._jobs.values())
+        for channel in channels:
+            channel.put(None)
+
+    def _send(self, request: dict) -> None:
+        with self._lock:
+            self._process.stdin.write(json.dumps(request) + "\n")
+            self._process.stdin.flush()
+
+    def run(self, job: dict, *, compute: bool) -> dict:
+        """Execute a job, and return its outcome, as :func:`run`."""
+        job_id = str(next(self._ids))
+        channel: queue.Queue[str | None] = queue.Queue()
+        with self._lock:
+            self._jobs[job_id] = channel
+        srun = (
+            srun_prefix(self.connection, job["action"])
+            if compute and self.connection.scheduled
+            else None
+        )
+        timeout = self.connection.timeout
+        deadline = None if timeout is None else time.monotonic() + timeout
+        try:
+            try:
+                self._send({"id": job_id, "job": job, "compute": compute, "srun": srun})
+            except (BrokenPipeError, OSError) as error:
+                raise RemoteError(
+                    f"Remote {job['action']}: the agent is gone", "".join(self._errors)
+                ) from error
+            while True:
+                remaining = None if deadline is None else deadline - time.monotonic()
+                try:
+                    if remaining is not None and remaining <= 0:
+                        raise queue.Empty
+                    payload = channel.get(timeout=remaining)
+                except queue.Empty:
+                    with contextlib.suppress(OSError):
+                        self._send({"cancel": job_id})
+                    raise RemoteError(
+                        f"Remote {job['action']} timed out after {timeout} s"
+                    ) from None
+                if payload is None:
+                    raise RemoteError(
+                        f"Remote {job['action']}: the agent exited",
+                        "".join(self._errors),
+                    )
+                if payload.startswith(worker.MARKER):
+                    return _outcome(job, json.loads(payload[len(worker.MARKER) :]), "")
+                if payload.startswith(worker.PROGRESS):
+                    _progress(payload)
+        finally:
+            with self._lock:
+                self._jobs.pop(job_id, None)
+
+    def close(self) -> None:
+        """Stop the agent (and the queued jobs it launched)."""
+        with contextlib.suppress(OSError):
+            self._process.stdin.close()
+        try:
+            self._process.wait(5)
+        except subprocess.TimeoutExpired:
+            _kill(self._process)
+
+
+_agents: dict[str, Agent] = {}
+_agents_lock = threading.Lock()
+
+
+def agent(connection: Connection) -> Agent:
+    """The agent of a connection, started if needed (or again, if it died)."""
+    key = connection.model_dump_json()
+    with _agents_lock:
+        found = _agents.get(key)
+        if found is None or not found.alive:
+            found = _agents[key] = Agent(connection)
+        return found
+
+
+def close_agents() -> None:
+    """Stop all the agents."""
+    with _agents_lock:
+        agents = list(_agents.values())
+        _agents.clear()
+    for found in agents:
+        found.close()
+
+
+atexit.register(close_agents)

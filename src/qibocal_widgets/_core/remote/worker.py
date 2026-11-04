@@ -49,6 +49,11 @@ ESTIMATE = re.compile(
 """Messages of the duration estimates, in seconds."""
 PLATFORMS = "QIBOLAB_PLATFORMS"
 """Environment variable locating qibolab platforms."""
+AGENT = "QIBOCAL_WIDGETS_AGENT "
+"""Prefix of the lines of an agent, followed by the job they belong to."""
+DIRECT = "QIBOCAL_WIDGETS_DIRECT"
+"""Environment variable of jobs launched by an agent, straight in the
+environment's interpreter: they report their own start."""
 GUARD = "QIBOCAL_WIDGETS_WORKER"
 """Environment variable set when running inside the configured environment."""
 REQUIREMENTS = "qibocamp-requirements.txt"
@@ -122,8 +127,7 @@ def emit_event(
     event = {"kind": kind, "estimate": seconds}
     if name is not None:
         event["name"] = name
-    sys.stdout.write(PROGRESS + json.dumps(event) + "\n")
-    sys.stdout.flush()
+    write(PROGRESS + json.dumps(event))
 
 
 def stage(name: str) -> None:
@@ -249,6 +253,161 @@ def delegate(job: dict, text: str) -> int:
         check=False,
     )
     return process.returncode
+
+
+# -- agent: a warm worker, outside of the queue ------------------------------
+
+
+def agent(venv: str) -> int:
+    """Serve jobs read from the standard input, one JSON object per line.
+
+    Started once per runner, on the access node (never in the queue): imports
+    are done once, and the jobs not needing the instruments run here, at once.
+    Acquisitions through the queue are launched as ``srun`` jobs, straight in
+    the environment's interpreter, relaying their output; without a queue,
+    they run here. Jobs run here one at a time, on the main thread, as qibolab
+    platforms require (they install signal handlers), and acquisitions share
+    the instruments anyway. Every output line is tagged with its job
+    (:data:`AGENT`). It exits with its standard input, i.e. when the client
+    disconnects.
+    """
+    import concurrent.futures
+    import queue
+
+    requests: queue.Queue = queue.Queue()
+    children: dict[str, subprocess.Popen] = {}
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=32)
+    # imported once, for all the jobs
+    import qibocal  # noqa: F401
+
+    def serve(request: dict) -> None:
+        job_id = str(request["id"])
+        job = request["job"]
+        _output.job = job_id
+        try:
+            if job.get("platforms_dir"):
+                os.environ[PLATFORMS] = str(Path(job["platforms_dir"]).expanduser())
+            if request.get("srun") is not None:
+                launch(job_id, job, request["srun"])
+                return
+            action = job["action"]
+            if action == "acquire":
+                emit_event("started")
+            emit({"ok": True, **ACTIONS[action](job)})
+        except Exception as error:  # noqa: BLE001 - any failure is reported
+            emit(
+                {
+                    "ok": False,
+                    "error": f"{type(error).__name__}: {error}",
+                    "traceback": traceback.format_exc(),
+                }
+            )
+        finally:
+            _output.job = None
+
+    def launch(job_id: str, job: dict, srun: list) -> None:
+        """Run a job through the queue, relaying its output."""
+        source = globals().get("WORKER_SOURCE") or Path(__file__).read_text()
+        command = [
+            *srun,
+            sys.executable,
+            "-u",
+            "-c",
+            f"WORKER_SOURCE = {source!r}\n{source}",
+        ]
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=dict(os.environ, **{GUARD: "1", DIRECT: "1"}),
+            start_new_session=True,  # cancelled with its children
+        )
+        children[job_id] = process
+        errors: list[str] = []
+        reader = threading.Thread(target=lambda: errors.extend(process.stderr))
+        reader.start()
+        done = False
+        try:
+            with contextlib.suppress(BrokenPipeError):
+                process.stdin.write(json.dumps(job))
+                process.stdin.close()
+            for line in process.stdout:
+                line = line.rstrip("\n")
+                done = done or line.startswith(MARKER)
+                write(line)
+            process.wait()
+        finally:
+            reader.join()
+            children.pop(job_id, None)
+        if not done:
+            emit(
+                {
+                    "ok": False,
+                    "error": f"Job exited with code {process.returncode} and no outcome",
+                    "traceback": "".join(errors[-40:]),
+                }
+            )
+
+    def cancel(job_id: str) -> None:
+        process = children.get(job_id)
+        if process is not None:
+            import signal
+
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+
+    def receive() -> None:
+        for line in sys.stdin:
+            if not line.strip():
+                continue
+            request = json.loads(line)
+            if "cancel" in request:
+                cancel(str(request["cancel"]))
+            elif request.get("srun") is not None:
+                pool.submit(serve, request)  # waiting for the queue, elsewhere
+            else:
+                requests.put(request)
+        requests.put(None)
+
+    threading.Thread(target=receive, daemon=True).start()
+    write(AGENT + "ready")
+    while (request := requests.get()) is not None:
+        serve(request)
+    # the client is gone: stop the queued jobs, it cannot receive them
+    for job_id in list(children):
+        cancel(job_id)
+    pool.shutdown(wait=False, cancel_futures=True)
+    return 0
+
+
+def start_agent(venv: str) -> int:
+    """Become the agent, in the configured environment's interpreter."""
+    env = environment_path(venv)
+    python = environment_python(env)
+    if not python.exists():
+        write(
+            AGENT
+            + "missing "
+            + json.dumps(f"Environment not found: {env}. Install it first.")
+        )
+        return 1
+    source = globals().get("WORKER_SOURCE") or Path(__file__).read_text()
+    os.environ[GUARD] = "1"
+    # replaced, keeping the standard streams: no process in between
+    os.execv(
+        str(python),
+        [
+            str(python),
+            "-u",
+            "-c",
+            f"WORKER_SOURCE = {source!r}\n{source}",
+            "agent",
+            venv,
+        ],
+    )
+    return 1
 
 
 # -- qibocal actions (inside the environment) --------------------------------
@@ -513,13 +672,32 @@ ACTIONS = {
 # -- entry point ---------------------------------------------------------------
 
 
+_output_lock = threading.Lock()
+_output = threading.local()
+"""The job of the current thread, in an agent."""
+
+
+def write(line: str) -> None:
+    """Write a line of the standard output, tagged with its job in an agent."""
+    job = getattr(_output, "job", None)
+    if job is not None:
+        line = f"{AGENT}{job} {line}"
+    with _output_lock:
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+
+
 def emit(payload: dict) -> None:
     """Write the outcome line."""
-    sys.stdout.write(MARKER + json.dumps(payload) + "\n")
-    sys.stdout.flush()
+    write(MARKER + json.dumps(payload))
 
 
 def main() -> int:
+    if sys.argv[1:2] == ["agent"]:
+        venv = sys.argv[2]
+        if os.environ.get(GUARD) != "1":
+            return start_agent(venv)
+        return agent(venv)
     text = sys.stdin.read()
     job = json.loads(text)
     action = job["action"]
@@ -534,6 +712,8 @@ def main() -> int:
             if action == "acquire":
                 emit_event("started")  # out of the queue, if any
             return delegate(job, text)
+        if os.environ.get(DIRECT) == "1" and action == "acquire":
+            emit_event("started")  # launched by an agent, out of the queue
         emit({"ok": True, **ACTIONS[action](job)})
         return 0
     except Exception as error:  # noqa: BLE001 - any failure is reported
