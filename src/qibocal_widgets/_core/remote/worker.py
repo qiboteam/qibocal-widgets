@@ -24,11 +24,13 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import traceback
 from pathlib import Path
 
@@ -275,10 +277,17 @@ def agent(venv: str) -> int:
     import queue
 
     requests: queue.Queue = queue.Queue()
-    children: dict[str, subprocess.Popen] = {}
+    clean_jobs()
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=32)
     # imported once, for all the jobs
     import qibocal  # noqa: F401
+
+    def following(request: dict) -> None:
+        _output.job = str(request["id"])
+        try:
+            follow(str(request["id"]), str(request["follow"]))
+        finally:
+            _output.job = None
 
     def serve(request: dict) -> None:
         job_id = str(request["id"])
@@ -288,7 +297,7 @@ def agent(venv: str) -> int:
             if job.get("platforms_dir"):
                 os.environ[PLATFORMS] = str(Path(job["platforms_dir"]).expanduser())
             if request.get("srun") is not None:
-                launch(job_id, job, request["srun"])
+                launch(job_id, job, request["srun"], request["name"])
                 return
             action = job["action"]
             if action == "acquire":
@@ -305,58 +314,93 @@ def agent(venv: str) -> int:
         finally:
             _output.job = None
 
-    def launch(job_id: str, job: dict, srun: list) -> None:
-        """Run a job through the queue, relaying its output."""
+    names: dict[str, str] = {}
+    """The job folder of each request, to cancel it."""
+
+    def launch(job_id: str, job: dict, srun: list, name: str) -> None:
+        """Run a job through the queue, detached, and follow it.
+
+        The job has a folder of its own, where its output is written: it
+        survives the agent (and the client), and can be followed again.
+        """
+        folder = jobs_dir() / name
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "job.json").write_text(json.dumps(job))
         source = globals().get("WORKER_SOURCE") or Path(__file__).read_text()
-        command = [
-            *srun,
-            sys.executable,
-            "-u",
-            "-c",
-            f"WORKER_SOURCE = {source!r}\n{source}",
-        ]
-        process = subprocess.Popen(
-            command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=dict(os.environ, **{GUARD: "1", DIRECT: "1"}),
-            start_new_session=True,  # cancelled with its children
+        (folder / "worker.py").write_text(source)
+        command = [*srun, sys.executable, "-u", "worker.py"]
+        script = (
+            f"{shlex.join(command)} < job.json > stdout.log 2> stderr.log; "
+            "echo $? > exit"
         )
-        children[job_id] = process
-        errors: list[str] = []
-        reader = threading.Thread(target=lambda: errors.extend(process.stderr))
-        reader.start()
-        done = False
+        process = subprocess.Popen(
+            ["sh", "-c", script],
+            cwd=folder,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=dict(os.environ, **{GUARD: "1", DIRECT: "1"}),
+            start_new_session=True,  # not stopped with the agent
+        )
+        (folder / "pid").write_text(str(process.pid))
+        # reaped while the agent lives; adopted by init afterwards
+        threading.Thread(target=process.wait, daemon=True).start()
+        follow(job_id, name)
+
+    def follow(job_id: str, name: str) -> None:
+        """Relay the output of a job, as written, until its outcome."""
+        names[job_id] = name
+        folder = jobs_dir() / name
+        if not folder.is_dir():
+            emit({"ok": False, "error": f"Unknown remote job {name}"})
+            return
+        output = folder / "stdout.log"
+        position = 0
+        pending = ""
         try:
-            with contextlib.suppress(BrokenPipeError):
-                process.stdin.write(json.dumps(job))
-                process.stdin.close()
-            for line in process.stdout:
-                line = line.rstrip("\n")
-                done = done or line.startswith(MARKER)
-                write(line)
-            process.wait()
+            while True:
+                ended = (folder / "exit").exists()
+                if output.exists():
+                    with output.open() as file:
+                        file.seek(position)
+                        chunk = file.read()
+                        position = file.tell()
+                    pending += chunk
+                    *lines, pending = pending.split("\n")
+                    for line in lines:
+                        write(line)
+                        if line.startswith(MARKER):
+                            return
+                if ended:
+                    code = (folder / "exit").read_text().strip()
+                    errors = folder / "stderr.log"
+                    details = errors.read_text() if errors.exists() else ""
+                    emit(
+                        {
+                            "ok": False,
+                            "error": f"Job exited with code {code} and no outcome",
+                            "traceback": "\n".join(details.splitlines()[-40:]),
+                        }
+                    )
+                    return
+                time.sleep(0.1)
         finally:
-            reader.join()
-            children.pop(job_id, None)
-        if not done:
-            emit(
-                {
-                    "ok": False,
-                    "error": f"Job exited with code {process.returncode} and no outcome",
-                    "traceback": "".join(errors[-40:]),
-                }
-            )
+            names.pop(job_id, None)
 
     def cancel(job_id: str) -> None:
-        process = children.get(job_id)
-        if process is not None:
-            import signal
+        name = names.get(job_id)
+        if name is None:
+            return
+        folder = jobs_dir() / name
+        import signal
 
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
+        with contextlib.suppress(OSError, ValueError, ProcessLookupError):
+            os.killpg(int((folder / "pid").read_text()), signal.SIGKILL)
+        with contextlib.suppress(OSError):
+            (folder / "exit").write_text("cancelled")
+
+    def forget(name: str) -> None:
+        shutil.rmtree(jobs_dir() / name, ignore_errors=True)
 
     def receive() -> None:
         for line in sys.stdin:
@@ -365,6 +409,10 @@ def agent(venv: str) -> int:
             request = json.loads(line)
             if "cancel" in request:
                 cancel(str(request["cancel"]))
+            elif "forget" in request:
+                forget(str(request["forget"]))
+            elif "follow" in request:
+                pool.submit(following, request)
             elif request.get("srun") is not None:
                 pool.submit(serve, request)  # waiting for the queue, elsewhere
             else:
@@ -375,11 +423,35 @@ def agent(venv: str) -> int:
     write(AGENT + "ready")
     while (request := requests.get()) is not None:
         serve(request)
-    # the client is gone: stop the queued jobs, it cannot receive them
-    for job_id in list(children):
-        cancel(job_id)
-    pool.shutdown(wait=False, cancel_futures=True)
-    return 0
+    # the client is gone: the queued jobs go on, detached, to be followed
+    # again; their followers have nobody to relay to, so stop at once
+    with _output_lock:
+        sys.stdout.flush()
+    os._exit(0)
+
+
+JOBS_RETENTION = 7 * 24 * 3600
+"""Seconds after which ended jobs which were never fetched are removed."""
+
+
+def jobs_dir() -> Path:
+    """Where detached jobs keep their folders."""
+    cache = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+    return Path(cache) / "qibocamp" / "jobs"
+
+
+def clean_jobs() -> None:
+    """Remove the folders of jobs ended long ago, and never fetched."""
+    import time as clock
+
+    root = jobs_dir()
+    if not root.is_dir():
+        return
+    for folder in root.iterdir():
+        ended = folder / "exit"
+        with contextlib.suppress(OSError):
+            if ended.exists() and clock.time() - ended.stat().st_mtime > JOBS_RETENTION:
+                shutil.rmtree(folder, ignore_errors=True)
 
 
 def start_agent(venv: str) -> int:

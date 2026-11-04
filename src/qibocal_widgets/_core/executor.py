@@ -354,7 +354,9 @@ class Executor(QibocalExecutor):
             bound: the protocol to execute.
             skip_fit: as in ``executor(bound)``.
             reuse: return an identical execution instead of acquiring again,
-                if any: one still running, or one recorded in the session
+                if any: one still running (also a detached remote job, e.g.
+                after a restart of the kernel, which is followed), or one
+                recorded in the session
                 (loaded from disk; only for protocols registered in
                 ``qibocal.protocols``, which Qibocal can load back). Executions
                 are identical with the same protocol, parameters, overrides,
@@ -399,12 +401,34 @@ class Executor(QibocalExecutor):
             return self._submitted_to_frontends(pending)
 
         pending._launcher = pending._rerun
+        detached = self._detached(key)
+        if detached is not None:
+            # still running remotely, or done meanwhile: followed, not acquired
+            # again, and already confirmed
+            pending._launcher = partial(
+                self._launch,
+                pending,
+                thread_type,
+                bound,
+                skip_fit,
+                kwargs,
+                key,
+                detached,
+            )
         if key is not None:
             with self._order:
                 self._running[key] = pending
-        if not (confirm and any(f.confirmable() for f in self.frontends)):
+        if detached is not None or not (
+            confirm and any(f.confirmable() for f in self.frontends)
+        ):
             pending.start()
         return self._submitted_to_frontends(pending)
+
+    def _detached(self, key: str | None) -> str | None:
+        """A detached remote job of the session with a reuse key, if any."""
+        if key is None or self.session is None or not hasattr(self.runner, "follow"):
+            return None
+        return self.session.job(key)
 
     def _launch(
         self,
@@ -414,8 +438,10 @@ class Executor(QibocalExecutor):
         skip_fit: bool,
         kwargs: dict,
         key: str | None,
+        follow: str | None = None,
     ) -> None:
-        """Start an execution in the background, taking its processing turn."""
+        """Start an execution in the background, taking its processing turn
+        (following a detached remote job, if ``follow`` names one)."""
         with self._order:
             ticket = self._submitted
             self._submitted += 1
@@ -423,7 +449,7 @@ class Executor(QibocalExecutor):
                 self._running[key] = pending
         thread_type(
             target=self._background,
-            args=(pending, ticket, bound, skip_fit, kwargs, key),
+            args=(pending, ticket, bound, skip_fit, kwargs, key, follow),
             name=f"qibocal-widgets-{pending.name}-{ticket}",
             daemon=True,
         ).start()
@@ -486,6 +512,7 @@ class Executor(QibocalExecutor):
         skip_fit: bool,
         kwargs: dict,
         key: str | None = None,
+        follow: str | None = None,
     ) -> None:
         acquired = error = None
         try:
@@ -496,8 +523,11 @@ class Executor(QibocalExecutor):
                 pending._set(ACQUIRING)
                 if phase == RUNNING:
                     pending._event(STARTED)
-                with self, progress.reporting(pending._event):
-                    acquired = self._chain("acquire", bound, **kwargs)
+                with self, progress.reporting(pending._event, key=key):
+                    if follow is not None:
+                        acquired = self.runner.follow(self, bound, follow)
+                    else:
+                        acquired = self._chain("acquire", bound, **kwargs)
         except BaseException as exception:  # noqa: BLE001 - reported to the caller
             error = exception
         pending.phase = None

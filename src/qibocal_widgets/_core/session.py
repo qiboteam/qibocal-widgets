@@ -51,6 +51,8 @@ __all__ = ["Session", "SessionExists"]
 DATA = "data"
 """Subfolder of the task folders."""
 KEYFILE = "qibocal-widgets.json"
+JOBS = "remote-jobs.json"
+"""Detached remote jobs of the session, not fetched yet, by name."""
 """Reuse key of an execution, in its task folder (ignored by Qibocal)."""
 
 
@@ -274,6 +276,42 @@ class Session:
         self._stats(recorded)
         self._dump()
         return recorded
+
+    def jobs(self) -> dict[str, dict]:
+        """Detached remote jobs not fetched yet, by name, with their reuse key
+        and protocol (see ``Executor.submit``)."""
+        path = self.path / JOBS
+        try:
+            return json.loads(path.read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def track(self, name: str, record: dict) -> None:
+        """Record a detached remote job, until fetched."""
+        if self.started:
+            self._write_jobs({**self.jobs(), name: record})
+
+    def untrack(self, name: str) -> None:
+        """Forget a fetched remote job."""
+        jobs = self.jobs()
+        if jobs.pop(name, None) is not None:
+            self._write_jobs(jobs)
+
+    def job(self, key: str) -> str | None:
+        """The latest detached job recorded with a reuse key, if any."""
+        found = [
+            (record.get("submitted", ""), name)
+            for name, record in self.jobs().items()
+            if record.get("key") == key
+        ]
+        return max(found)[1] if found else None
+
+    def _write_jobs(self, jobs: dict) -> None:
+        path = self.path / JOBS
+        if jobs:
+            path.write_text(json.dumps(jobs, indent=2))
+        else:
+            path.unlink(missing_ok=True)
 
     def tag(self, completed: Completed, key: str) -> None:
         """Record the reuse key of an execution (see ``Executor.submit``)."""

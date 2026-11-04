@@ -12,29 +12,37 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from typing import Any
 
 from .remote.worker import estimates
 
-__all__ = ["report", "reporting"]
+__all__ = ["current", "report", "reporting"]
 
 _current = threading.local()
 
 
 @contextmanager
-def reporting(callback: Callable[..., None]) -> Iterator[None]:
+def reporting(callback: Callable[..., None], **context: Any) -> Iterator[None]:
     """Pass the events of the acquisitions in the current thread to
     ``callback(kind, seconds, name)`` (``name`` for ``stage`` events).
 
     Both the estimates logged in this thread, and the events reported with
-    :func:`report` (e.g. received from a remote worker).
+    :func:`report` (e.g. received from a remote worker). ``context`` is
+    available to runners, with :func:`current`.
     """
-    previous = getattr(_current, "callback", None)
-    _current.callback = callback
+    previous = getattr(_current, "callback", None), getattr(_current, "context", {})
+    _current.callback, _current.context = callback, context
     try:
         with estimates(lambda seconds, kind: callback(kind, seconds)):
             yield
     finally:
-        _current.callback = previous
+        _current.callback, _current.context = previous
+
+
+def current(name: str, default: Any = None) -> Any:
+    """A value of the context of the acquisition in the current thread (e.g.
+    its reuse ``key``), given to :func:`reporting`."""
+    return getattr(_current, "context", {}).get(name, default)
 
 
 def report(kind: str, seconds: float | None = None, name: str | None = None) -> None:

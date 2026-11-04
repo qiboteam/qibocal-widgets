@@ -78,8 +78,8 @@ updates, platform states, layouts, and saves run in it at once, with no new
 connection and no new process; acquisitions through the queue are launched by
 it as ``srun`` jobs, straight in the environment's interpreter. Without a
 queue (``ssh`` only), acquisitions run in the agent itself, one at a time. The
-agent exits with the notebook: when its connection closes, it stops the jobs
-it launched, and leaves nothing behind. ``agent=False`` in the connection
+agent exits with the notebook, when its connection closes; the queued jobs
+it launched go on, detached (see below). ``agent=False`` in the connection
 starts a process of its own for every step instead.
 
 **When the queue should be held.** If a session needs the instruments for
@@ -325,10 +325,20 @@ Alternatively, in Marimo only, set the runtime to mark dependent cells as stale
 instead of running them (``on_cell_change = "lazy"``, in the notebook settings
 or under ``[tool.marimo.runtime]`` in ``pyproject.toml``).
 
-The job is held by a background thread and the agent's SSH connection: the
-kernel and the connection must stay alive until it completes. Detached jobs,
-surviving disconnections and restarts, are planned
-(`#8 <https://github.com/qiboteam/qibocal-widgets/issues/8>`_).
+**Detached jobs.** Acquisitions through the queue are detached from the
+notebook: each has a folder of its own on the remote machine
+(``~/.cache/qibocamp/jobs``), where its output is written, and survives the
+loss of the SSH connection, and restarts of the kernel. The session records
+them (``remote-jobs.json``) until fetched: after a disconnection, or a
+restart (attaching the session), submitting the same execution with
+``reuse=True`` follows the job, still running or done meanwhile, instead of
+acquiring again. Fetched jobs are removed; those never fetched, a week after
+they ended. A pending execution whose connection was lost fails with a
+:class:`~qibocal_widgets.remote.RemoteError` whose ``ended`` is ``False``: the
+job may still be running.
+
+Acquisitions without a queue (``ssh`` only) run in the agent itself, warm,
+and are not detached: they end with it.
 
 Queue
 -----

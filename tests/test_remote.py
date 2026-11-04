@@ -800,3 +800,101 @@ def test_without_agent(cluster, bound):
     executor = Executor(None, targets=TARGETS, update=True, runner=remote)
     executor(bound)
     assert [call["tool"] for call in cluster()] == ["ssh", "srun", "ssh", "ssh"]
+
+
+# -- detached jobs -----------------------------------------------------------------
+
+
+def _jobs_folder(tmp_path):
+    return tmp_path / "cache" / "qibocamp" / "jobs"
+
+
+def _lose_agent_while_running(cluster, tmp_path, monkeypatch, bound):
+    """Submit a queued acquisition, then lose the agent (e.g. a disconnection)."""
+    from qibocal_widgets import Session  # noqa: F401
+
+    monkeypatch.setenv("FAKE_SLEEP", "2")
+    path = tmp_path / "session"
+    executor = Executor(
+        None,
+        path=path,
+        targets=TARGETS,
+        update=False,
+        runner=Remote(ssh="me@login", queue="chip", platform="mock"),
+    )
+    pending = executor.submit(bound, reuse=True)
+    jobs_file = path / "remote-jobs.json"
+    wait_for(lambda: jobs_file.exists())
+    (name,) = json.loads(jobs_file.read_text())
+    transport.close_agents()  # the client disconnects
+    with pytest.raises(RemoteError, match="agent") as error:
+        pending.result(30)
+    assert not error.value.ended  # the job goes on
+    return path, name
+
+
+def wait_for(condition, timeout=30):
+    import time
+
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, "timed out"
+        time.sleep(0.05)
+
+
+def test_detached_survives(cluster, tmp_path, monkeypatch, bound):
+    from qibocal_widgets import Session
+
+    path, name = _lose_agent_while_running(cluster, tmp_path, monkeypatch, bound)
+    assert (_jobs_folder(tmp_path) / name).is_dir()
+    # after a restart: the same session, and the same submission
+    restarted = Executor(
+        None,
+        session=Session.attach(path),
+        targets=TARGETS,
+        update=False,
+        runner=Remote(ssh="me@login", queue="chip", platform="mock"),
+    )
+    pending = restarted.submit(bound, reuse=True)
+    completed = pending.result(30)
+    assert completed.data.scale  # acquired by the detached job
+    assert [call["tool"] for call in cluster()].count("srun") == 1  # not again
+    assert not (path / "remote-jobs.json").exists()  # fetched: forgotten
+    assert not (_jobs_folder(tmp_path) / name).exists()
+
+
+def test_detached_done_meanwhile(cluster, tmp_path, monkeypatch, bound):
+    from qibocal_widgets import Session
+
+    path, name = _lose_agent_while_running(cluster, tmp_path, monkeypatch, bound)
+    wait_for(lambda: (_jobs_folder(tmp_path) / name / "exit").exists())
+    restarted = Executor(
+        None,
+        session=Session.attach(path),
+        targets=TARGETS,
+        update=False,
+        runner=Remote(ssh="me@login", queue="chip", platform="mock"),
+    )
+    pending = restarted.submit(bound, reuse=True)
+    assert pending.result(30).data.scale
+    assert [call["tool"] for call in cluster()].count("srun") == 1
+
+
+def test_failed_job_forgotten(cluster, tmp_path):
+    def _local(params, platform, targets):  # not importable remotely
+        raise AssertionError
+
+    local = Protocol(_local, None, None, None)
+    path = tmp_path / "session"
+    executor = Executor(
+        None,
+        path=path,
+        targets=TARGETS,
+        update=False,
+        runner=Remote(queue="chip", platform="mock"),
+    )
+    executor.submit(fake(npoints=3), reuse=True).result(30)
+    with pytest.raises(RemoteError):
+        executor.submit(local(), reuse=True).result(30)
+    assert not (path / "remote-jobs.json").exists()
+    assert not any(_jobs_folder(tmp_path).iterdir())

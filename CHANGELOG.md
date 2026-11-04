@@ -30,6 +30,10 @@ First development version, targeting the executor interface of Qibocal's
   without a queue, in the agent itself); it exits with the notebook. The
   queue is never held between acquisitions (`agent=False` for a process per
   step).
+- Detached remote jobs: queued acquisitions survive disconnections and
+  restarts of the kernel; recorded in the session until fetched, they are
+  followed again by `submit(..., reuse=True)`, still running or done
+  meanwhile, instead of acquiring again.
 - `pending.started_at`: when an execution started, once confirmed with
   `confirm`; times, totals and profiles count from there, not from the
   submission.

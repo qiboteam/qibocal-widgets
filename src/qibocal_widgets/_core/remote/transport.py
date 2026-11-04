@@ -19,6 +19,7 @@ import signal
 import subprocess
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from .. import progress
@@ -31,6 +32,7 @@ __all__ = [
     "agent",
     "close_agents",
     "command",
+    "forget",
     "run",
     "run_once",
     "slurm_arguments",
@@ -73,11 +75,14 @@ class RemoteError(RuntimeError):
     TAIL = 20
     """Lines of details included in the message."""
 
-    def __init__(self, message: str, details: str = ""):
+    def __init__(self, message: str, details: str = "", *, ended: bool = True):
         super().__init__(message)
         self.message = message
         self.details = details
         """Remote traceback, or standard error, when available."""
+        self.ended = ended
+        """Whether the job is over: ``False`` when only the connection to it
+        was lost (a detached job may still be running)."""
 
     def __str__(self) -> str:
         lines = self.details.strip().splitlines()[-self.TAIL :]
@@ -181,16 +186,39 @@ def _kill(process: subprocess.Popen) -> None:
         os.killpg(process.pid, signal.SIGKILL)
 
 
-def run(connection: Connection, job: dict, *, compute: bool) -> dict:
+def run(
+    connection: Connection,
+    job: dict,
+    *,
+    compute: bool,
+    name: str | None = None,
+    follow: str | None = None,
+) -> dict:
     """Execute a job remotely, through the connection's agent (see
     :class:`Agent`), or, for installations, or with ``agent=False``, in a
-    process of its own (see :func:`run_once`)."""
+    process of its own (see :func:`run_once`).
+
+    Args:
+        name: for queued jobs, run detached under this name: the job survives
+            the agent and the client, and can be followed again.
+        follow: instead of running ``job``, follow the detached job of this
+            name, until its outcome.
+    """
     job = {"venv": connection.venv, **job}
     if connection.platforms_dir is not None:
         job.setdefault("platforms_dir", connection.platforms_dir)
     if connection.agent and job["action"] != "install":
-        return agent(connection).run(job, compute=compute)
+        return agent(connection).run(job, compute=compute, name=name, follow=follow)
+    if follow is not None:
+        raise RemoteError("Following detached jobs requires the agent")
     return run_once(connection, job, compute=compute)
+
+
+def forget(connection: Connection, name: str) -> None:
+    """Remove the folder of a detached job, once fetched."""
+    if connection.agent:
+        with contextlib.suppress(RemoteError, OSError):
+            agent(connection).forget(name)
 
 
 def run_once(connection: Connection, job: dict, *, compute: bool) -> dict:
@@ -371,7 +399,18 @@ class Agent:
             self._process.stdin.write(json.dumps(request) + "\n")
             self._process.stdin.flush()
 
-    def run(self, job: dict, *, compute: bool) -> dict:
+    def forget(self, name: str) -> None:
+        """Remove the folder of a detached job."""
+        self._send({"forget": name})
+
+    def run(
+        self,
+        job: dict,
+        *,
+        compute: bool,
+        name: str | None = None,
+        follow: str | None = None,
+    ) -> dict:
         """Execute a job, and return its outcome, as :func:`run`."""
         job_id = str(next(self._ids))
         channel: queue.Queue[str | None] = queue.Queue()
@@ -385,11 +424,19 @@ class Agent:
         timeout = self.connection.timeout
         deadline = None if timeout is None else time.monotonic() + timeout
         try:
+            if follow is not None:
+                request = {"id": job_id, "follow": follow}
+            else:
+                request = {"id": job_id, "job": job, "compute": compute, "srun": srun}
+                if srun is not None:
+                    request["name"] = name or uuid.uuid4().hex
             try:
-                self._send({"id": job_id, "job": job, "compute": compute, "srun": srun})
+                self._send(request)
             except (BrokenPipeError, OSError) as error:
                 raise RemoteError(
-                    f"Remote {job['action']}: the agent is gone", "".join(self._errors)
+                    f"Remote {job['action']}: the agent is gone",
+                    "".join(self._errors),
+                    ended=False,
                 ) from error
             while True:
                 remaining = None if deadline is None else deadline - time.monotonic()
@@ -407,6 +454,7 @@ class Agent:
                     raise RemoteError(
                         f"Remote {job['action']}: the agent exited",
                         "".join(self._errors),
+                        ended=False,
                     )
                 if payload.startswith(worker.MARKER):
                     return _outcome(job, json.loads(payload[len(worker.MARKER) :]), "")

@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import os
+import uuid
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from qibocal.auto.operation import BoundProtocol, Parameters
 from qibocal.auto.task import Completed
 
+from .. import progress
 from ..runner import Runner
 from . import jobs, queue, transport
 from .config import CONNECTION_VARIABLE, Connection, load_connection
+from .transport import RemoteError
 
 if TYPE_CHECKING:
     from ..executor import Executor
@@ -231,8 +235,59 @@ class Remote(Runner):
             state=self._state(executor),
             overrides=kwargs,
         )
-        outcome = transport.run(self.connection, job, compute=True)
+        name = None
+        if self.connection.agent and self.connection.scheduled:
+            # detached: recorded in the session, to be followed again after a
+            # disconnection, or a restart of the kernel
+            name = uuid.uuid4().hex
+            if executor.session is not None:
+                with executor._records:
+                    executor.session.track(
+                        name,
+                        {
+                            "key": progress.current("key"),
+                            "protocol": job["protocol"],
+                            "targets": job["targets"],
+                            "submitted": datetime.now(UTC).isoformat(),
+                        },
+                    )
+        try:
+            outcome = transport.run(self.connection, job, compute=True, name=name)
+        except RemoteError as error:
+            if name is not None and error.ended:
+                self._forget(executor, name)
+            raise
+        return self._fetched(executor, bound, outcome, name)
+
+    def follow(self, executor: Executor, bound: BoundProtocol, name: str) -> Completed:
+        """The acquisition of a detached job, followed until its outcome (e.g.
+        submitted before a restart of the kernel)."""
+        job = {"action": "acquire"}
+        try:
+            outcome = transport.run(self.connection, job, compute=True, follow=name)
+        except RemoteError as error:
+            if error.ended:
+                self._forget(executor, name)
+            raise
+        return self._fetched(executor, bound, outcome, name)
+
+    def _forget(self, executor: Executor, name: str) -> None:
+        """Forget a detached job, fetched or over."""
+        transport.forget(self.connection, name)
+        if executor.session is not None:
+            with executor._records:
+                executor.session.untrack(name)
+
+    def _fetched(
+        self,
+        executor: Executor,
+        bound: BoundProtocol,
+        outcome: dict,
+        name: str | None,
+    ) -> Completed:
         data = jobs.load_files(outcome["files"], bound.protocol.data_type.load)
+        if name is not None:
+            self._forget(executor, name)
         return Completed(
             bound=_executed(bound, outcome["parameters"]),
             _data=data,
