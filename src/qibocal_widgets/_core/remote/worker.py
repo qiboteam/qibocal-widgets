@@ -352,7 +352,7 @@ def agent(venv: str) -> int:
         names[job_id] = name
         folder = jobs_dir() / name
         if not folder.is_dir():
-            emit({"ok": False, "error": f"Unknown remote job {name}"})
+            emit({"ok": False, "error": f"{UNKNOWN} {name}", "unknown": True})
             return
         output = folder / "stdout.log"
         position = 0
@@ -456,6 +456,9 @@ def package_versions() -> "dict[str, str]":
         found[name] = version
     return found
 
+
+UNKNOWN = "Unknown remote job"
+"""Error of jobs to follow which were never launched (or removed)."""
 
 JOBS_RETENTION = 7 * 24 * 3600
 """Seconds after which ended jobs which were never fetched are removed."""

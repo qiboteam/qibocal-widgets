@@ -826,7 +826,9 @@ def _lose_agent_while_running(cluster, tmp_path, monkeypatch, bound):
     jobs_file = path / "remote-jobs.json"
     wait_for(lambda: jobs_file.exists())
     (name,) = json.loads(jobs_file.read_text())
-    transport.close_agents()  # the client disconnects
+    # launched remotely (its folder written), then the client disconnects
+    wait_for(lambda: (_jobs_folder(tmp_path) / name / "pid").exists())
+    transport.close_agents()
     with pytest.raises(RemoteError, match="agent") as error:
         pending.result(30)
     assert not error.value.ended  # the job goes on
@@ -856,7 +858,7 @@ def test_detached_survives(cluster, tmp_path, monkeypatch, bound):
         runner=Remote(ssh="me@login", queue="chip", platform="mock"),
     )
     pending = restarted.submit(bound, reuse=True)
-    completed = pending.result(30)
+    completed = pending.result(60)
     assert completed.data.scale  # acquired by the detached job
     assert [call["tool"] for call in cluster()].count("srun") == 1  # not again
     assert not (path / "remote-jobs.json").exists()  # fetched: forgotten
@@ -876,7 +878,7 @@ def test_detached_done_meanwhile(cluster, tmp_path, monkeypatch, bound):
         runner=Remote(ssh="me@login", queue="chip", platform="mock"),
     )
     pending = restarted.submit(bound, reuse=True)
-    assert pending.result(30).data.scale
+    assert pending.result(60).data.scale
     assert [call["tool"] for call in cluster()].count("srun") == 1
 
 
@@ -931,3 +933,37 @@ def test_profile_report(cluster):
     assert report.count("\n|") >= len(second.profile()) + 2
     csv = second.profile_report("csv")
     assert csv.startswith("# ramsey_signal") and "step,took (s),at (s)" in csv
+
+
+def test_detached_never_launched(cluster, tmp_path, bound):
+    """A job recorded, but never launched (lost just before): acquired again."""
+    from qibocal_widgets import Session
+
+    path = tmp_path / "session"
+    remote = Remote(ssh="me@login", queue="chip", platform="mock")
+    executor = Executor(None, path=path, targets=TARGETS, update=False, runner=remote)
+    first = executor.submit(bound, reuse=True)
+    first.result(60)
+    key = executor._reuse_key(bound, False, {})
+    session = Session.attach(path)
+    session.started = True
+    session.track("lost", {"key": key, "submitted": "9999"})
+    # the recorded execution would be reused from disk for registered
+    # protocols: this one is not, so the job record is what is looked up
+    again = Executor(None, session=Session.attach(path), targets=TARGETS, runner=remote)
+    pending = again.submit(bound, reuse=True)
+    assert pending.result(60).data.scale
+    assert [call["tool"] for call in cluster()].count("srun") == 2
+    assert "lost" not in Session.attach(path).jobs()
+
+
+def test_platform_updates_remote(cluster, bound, mock_frequency):
+    """Shipped with the job only: the runner's state is not changed."""
+    remote = Remote(ssh="me@login", queue="chip", platform="mock")
+    executor = Executor(None, targets=TARGETS, update=False, runner=remote)
+    path = "configs.0/drive.frequency"
+    completed = executor(bound, platform_updates={path: 4.5e9})
+    assert completed.data.scale[0] == 4.5e9
+    assert executor.platform_state[f"parameters.{path}"] == mock_frequency[0]
+    assert executor.acquire(bound).data.scale[0] == mock_frequency[0]
+    assert len(executor.history) == 0

@@ -88,6 +88,34 @@ respect to another state:
     start = PlatformState.load(executor.path / "platform")
     executor.platform_state.diff(start)  # {path: (before, now)}
 
+Temporary updates
+-----------------
+
+To run one execution with some values changed, as the ``updates`` of
+``platform.execute``, without changing the platform, pass
+``platform_updates``, by path:
+
+.. code-block:: python
+
+    executor(
+        protocols.qubit_spectroscopy(...),
+        platform_updates={"configs.0/drive.frequency": 4.95e9},
+    )
+    executor.submit(bound, platform_updates={...})  # in the background too
+
+- The values apply to the acquisition only. Locally, they are set on the
+  platform and restored after; with a :class:`~qibocal_widgets.remote.Remote`
+  runner, they are merged in the state shipped with the job, and the runner's
+  state is not changed. The platform history records nothing: the platform did
+  not change.
+- Paths are checked at once, and the updated state validated as for any edit.
+- They are part of the identity of the execution: with ``reuse=True``, other
+  values acquire again. They are recorded with the execution
+  (``platform-updates.json`` in its folder), and in its profile report.
+- The fit, and an update of the platform from it (``update=True``, or
+  ``completed.update()``), apply to the actual platform state: the fitted
+  values are those measured with the temporary ones.
+
 Layout
 ------
 

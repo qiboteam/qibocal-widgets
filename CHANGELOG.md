@@ -37,6 +37,10 @@ First development version, targeting the executor interface of Qibocal's
 - `pending.started_at`: when an execution started, once confirmed with
   `confirm`; times, totals and profiles count from there, not from the
   submission.
+- `platform_updates`: values set by path for one execution only, as the
+  `updates` of `platform.execute`, for `submit`, `acquire` and blocking
+  calls, locally and remotely; the platform state and its history are not
+  changed; part of the reuse key, and recorded with the execution.
 - Profiles in the displayed executions: a *⏱ profile* toggle by the timing,
   with the steps, and buttons copying them as Markdown or CSV, with the
   context (setup, agent, versions; no host names). Blocking calls are

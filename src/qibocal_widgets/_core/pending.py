@@ -117,6 +117,8 @@ class Pending:
         self._phase: str | None = None
         self.history: list[tuple[datetime, str, str | None]] = []
         """Changes of status and phase, with their times (UTC), for profiling."""
+        self.platform_updates: dict[str, Any] = {}
+        """Values set by path for this execution only (see ``Executor.submit``)."""
         self.overrides: dict[str, Any] = {}
         """Execution overrides (e.g. ``targets``), as given to ``submit``."""
         self._status = READY

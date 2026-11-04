@@ -373,15 +373,7 @@ class PlatformState:
         """
         if self._sink is None:
             raise ReadOnlyState("Snapshots cannot be updated")
-        documents = self.documents()
-        for path, value in changes.items():
-            resolved = normalize(path, documents)
-            if resolved is None or resolved in ROOTS or resolved == "":
-                raise KeyError(path)
-            _set(documents, resolved, value)
-        updated = _state(documents)
-        _validate(updated)
-        self._sink(updated)
+        self._sink(updated(self.state(), changes))
 
     def __setitem__(self, path: str, value: Any) -> None:
         self.update({path: value})
@@ -416,6 +408,40 @@ class PlatformState:
         except LookupError:
             return f"<PlatformState {self.name} ({kind}, unknown)>"
         return f"<PlatformState {self.name} ({kind}, {count} values)>"
+
+
+def resolve_changes(
+    state: platforms.State, changes: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Changes by full path (see :func:`normalize`).
+
+    Raises:
+        KeyError: for paths which do not exist.
+    """
+    documents = _documents(state)
+    resolved = {}
+    for path, value in changes.items():
+        full = normalize(path, documents)
+        if full is None or full in ROOTS or full == "":
+            raise KeyError(path)
+        resolved[full] = value
+    return resolved
+
+
+def updated(state: platforms.State, changes: Mapping[str, Any]) -> platforms.State:
+    """A state with values set by path, validated as a whole.
+
+    Raises:
+        KeyError: for paths which do not exist (no new entries are created, so
+            that typos are not silently accepted).
+        ValueError: if the updated state is not valid.
+    """
+    documents = _documents(state)
+    for path, value in resolve_changes(state, changes).items():
+        _set(documents, path, value)
+    result = _state(documents)
+    _validate(result)
+    return result
 
 
 def _validate(state: platforms.State) -> None:

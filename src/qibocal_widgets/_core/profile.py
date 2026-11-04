@@ -166,6 +166,11 @@ def context_lines(trace: Any) -> list[str]:
         setup.append("followed after a reconnection")
     if setup:
         lines.append("setup: " + ", ".join(setup))
+    if context.get("platform_updates"):
+        updates = ", ".join(
+            f"{k} = {v!r}" for k, v in context["platform_updates"].items()
+        )
+        lines.append(f"temporary platform updates: {updates}")
     local = context.get("local") or versions()
     lines.append("local: " + ", ".join(f"{k} {v}" for k, v in local.items()))
     if context.get("remote"):

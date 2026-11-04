@@ -8,6 +8,8 @@ elsewhere override only those, and keep the rest local.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from qibocal import Executor as QibocalExecutor
@@ -102,6 +104,22 @@ class Runner:
 
         folder = locate_platform(executor.platform.name)
         return str(platforms.export(state, folder, overwrite))
+
+    @contextmanager
+    def overriding(self, executor: Executor, state: platforms.State) -> Iterator[None]:
+        """Run the steps within, in the current thread, on another calibration
+        state, temporarily (see ``platform_updates`` in ``Executor.submit``).
+
+        Locally, the state is applied to the platform, and restored after.
+        """
+        if executor.platform is None:
+            raise ValueError("No platform to update temporarily")
+        original = platforms.state(executor.platform)
+        platforms.apply(executor.platform, state)
+        try:
+            yield
+        finally:
+            platforms.apply(executor.platform, original)
 
     def acquire(
         self, executor: Executor, bound: BoundProtocol, **kwargs: Any

@@ -16,7 +16,7 @@ import hashlib
 import json
 import os
 import threading
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from functools import partial
@@ -41,11 +41,15 @@ from .protocols import reference, registered_name
 from .remote.worker import parameters_document
 from .runner import Local, Runner
 from .session import Session
-from .state import PlatformState
+from .state import PlatformState, resolve_changes, updated
 from .timeline import ACQUIRED, STARTED
 from .updates import Updates, _key
 
 __all__ = ["Executor"]
+
+
+PLATFORM_UPDATES = "platform-updates.json"
+"""Temporary platform updates of an execution, in its folder."""
 
 
 def _jsonable(targets: list) -> list:
@@ -333,6 +337,7 @@ class Executor(QibocalExecutor):
         *,
         reuse: bool | None = None,
         confirm: bool | None = None,
+        platform_updates: Mapping[str, Any] | None = None,
         **kwargs: Any,
     ) -> Pending:
         """Execute a protocol in the background, as ``executor(bound)``.
@@ -371,6 +376,11 @@ class Executor(QibocalExecutor):
                 ``pending.start()``. Only where a frontend can show it (e.g.
                 in notebooks); elsewhere, it starts at once. Reused executions
                 need no confirmation. Defaults to the executor's.
+            platform_updates: values set by path (as
+                ``executor.platform_state.update``) for this execution only, as
+                ``updates`` of ``platform.execute``: the platform state, and its
+                history, are not changed. Part of the identity of the execution,
+                for ``reuse``, and recorded with it (``platform-updates.json``).
             **kwargs: execution overrides, as in ``executor(bound)``.
         """
         pending_type, thread_type = Pending, threading.Thread
@@ -382,7 +392,8 @@ class Executor(QibocalExecutor):
 
         reuse = self.reuse if reuse is None else reuse
         confirm = self.confirm if confirm is None else confirm
-        key = self._reuse_key(bound, skip_fit, kwargs) if reuse else None
+        updates = self._platform_updates(platform_updates)
+        key = self._reuse_key(bound, skip_fit, kwargs, updates) if reuse else None
         folder = None
         if key is not None:
             with self._order:
@@ -394,6 +405,7 @@ class Executor(QibocalExecutor):
                 folder = self.session.find(key)
 
         pending = self._pending(pending_type, bound, kwargs)
+        pending.platform_updates = updates
         # the same launcher starts the execution, and runs it again
         pending._rerun = partial(
             self._launch, pending, thread_type, bound, skip_fit, kwargs, key
@@ -425,6 +437,28 @@ class Executor(QibocalExecutor):
         ):
             pending.start()
         return self._submitted_to_frontends(pending)
+
+    def _follow(self, bound: BoundProtocol, name: str, kwargs: dict) -> Any:
+        """A detached job followed, or acquired again if it was never launched
+        (e.g. the connection was lost just before)."""
+        from .remote.transport import RemoteError
+        from .remote.worker import UNKNOWN
+
+        try:
+            return self.runner.follow(self, bound, name)
+        except RemoteError as error:
+            if not str(error).startswith(f"Remote acquire failed: {UNKNOWN}"):
+                raise
+        with self._updated_temporarily(self._running_updates(bound)):
+            return self._chain("acquire", bound, **kwargs)
+
+    def _running_updates(self, bound: BoundProtocol) -> dict[str, Any]:
+        """The temporary updates of the pending execution of a protocol."""
+        with self._order:
+            for pending in self._running.values():
+                if pending.bound is bound:
+                    return pending.platform_updates
+        return {}
 
     def _detached(self, key: str | None) -> str | None:
         """A detached remote job of the session with a reuse key, if any."""
@@ -470,8 +504,43 @@ class Executor(QibocalExecutor):
             pending.views[frontend.protocol] = frontend.render_pending
         return pending
 
+    def _platform_updates(self, changes: Mapping[str, Any] | None) -> dict[str, Any]:
+        """Temporary platform updates, by full path (checked now).
+
+        Raises:
+            KeyError: for paths which do not exist.
+        """
+        if not changes:
+            return {}
+        state = self.runner.platform_state(self)
+        if state is None:
+            raise ValueError("Temporary platform updates require a platform state")
+        return resolve_changes(state, changes)
+
+    @contextmanager
+    def _updated_temporarily(self, updates: dict[str, Any]) -> Iterator[None]:
+        """Acquire on the current state, with temporary updates, if any."""
+        if not updates:
+            yield
+            return
+        state = updated(self.runner.platform_state(self), updates)
+        with self.runner.overriding(self, state):
+            yield
+
+    def _record_updates(self, completed: Any, updates: dict[str, Any]) -> None:
+        """Record the temporary updates of an execution, in its folder."""
+        if updates and getattr(completed, "path", None) is not None:
+            with self._records:
+                (Path(completed.path) / PLATFORM_UPDATES).write_text(
+                    json.dumps(updates, indent=2)
+                )
+
     def _reuse_key(
-        self, bound: BoundProtocol, skip_fit: bool, kwargs: dict
+        self,
+        bound: BoundProtocol,
+        skip_fit: bool,
+        kwargs: dict,
+        updates: dict[str, Any] | None = None,
     ) -> str | None:
         """Identity of an execution, for reuse; ``None`` if not identifiable."""
         protocol = reference(bound.protocol)
@@ -488,6 +557,8 @@ class Executor(QibocalExecutor):
                 "targets": parameters_document(targets),
                 "skip_fit": skip_fit,
             }
+            if updates:
+                document["platform_updates"] = parameters_document(updates)
         except TypeError:
             return None
         text = json.dumps(document, sort_keys=True)
@@ -525,12 +596,16 @@ class Executor(QibocalExecutor):
                 pending._set(ACQUIRING)
                 if phase == RUNNING:
                     pending._event(STARTED)
+                updates = pending.platform_updates
                 pending.context.update(key=key, **self._profile_context())
+                if updates:
+                    pending.context["platform_updates"] = updates
                 with self, progress.reporting(pending._event, pending.context):
                     if follow is not None:
-                        acquired = self.runner.follow(self, bound, follow)
+                        acquired = self._follow(bound, follow, kwargs)
                     else:
-                        acquired = self._chain("acquire", bound, **kwargs)
+                        with self._updated_temporarily(updates):
+                            acquired = self._chain("acquire", bound, **kwargs)
         except BaseException as exception:  # noqa: BLE001 - reported to the caller
             error = exception
         pending.phase = None
@@ -546,6 +621,7 @@ class Executor(QibocalExecutor):
                 raise error
             pending._set_phase("recording")
             recorded = self._record(acquired)
+            self._record_updates(recorded, pending.platform_updates)
             if key is not None and self.session is not None:
                 with self._records:
                     self.session.tag(recorded, key)
@@ -628,19 +704,39 @@ class Executor(QibocalExecutor):
             self._versions = versions()
         return {"setup": self.runner.setup(self), "local": self._versions}
 
-    def acquire(self, bound: BoundProtocol, **kwargs: Any) -> Completed:
+    def acquire(
+        self,
+        bound: BoundProtocol,
+        *,
+        platform_updates: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> Completed:
+        """Acquire, as :meth:`qibocal.Executor.acquire`.
+
+        Args:
+            platform_updates: values set by path for this acquisition only (see
+                :meth:`submit`); also accepted by ``executor(bound, ...)``.
+        """
+        updates = self._platform_updates(platform_updates)
         trace = Trace()
         trace.context.update(self._profile_context())
+        if updates:
+            trace.context["platform_updates"] = updates
         phase = self.runner.acquiring_phase(self)
         trace.phase(ACQUIRING, phase)
         if phase == RUNNING:
             trace.event(STARTED)
-        with progress.reporting(trace.event, trace.context):
+        with (
+            progress.reporting(trace.event, trace.context),
+            self._updated_temporarily(updates),
+        ):
             completed = self._chain("acquire", bound, **kwargs)
         if trace.timeline.started is not None and trace.timeline.ended is None:
             trace.event(ACQUIRED)
         trace.phase(PROCESSING, "recording")
-        result = self._finish(self._record(completed))
+        recorded = self._record(completed)
+        self._record_updates(recorded, updates)
+        result = self._finish(recorded)
         result.trace = trace
         trace.phase("idle")
         return result

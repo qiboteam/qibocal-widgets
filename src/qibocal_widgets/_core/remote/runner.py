@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import os
+import threading
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -54,6 +57,8 @@ class Remote(Runner):
         self.state: dict | None = None
         """Calibration state of the remote platform, after remote updates."""
         self._layout: dict | None = None
+        self._override = threading.local()
+        """The state shipped instead, by thread (see :meth:`overriding`)."""
 
     def __repr__(self) -> str:
         options = self.connection.model_dump(exclude_defaults=True)
@@ -91,7 +96,25 @@ class Remote(Runner):
             "or create the executor with a platform"
         )
 
+    @contextmanager
+    def overriding(self, executor: Executor, state: dict) -> Iterator[None]:
+        """Ship another state with the jobs of the current thread, temporarily:
+        the runner's state, and the local platform if any, are not changed."""
+        if not self.connection.dispatched:
+            with super().overriding(executor, state):
+                yield
+            return
+        previous = getattr(self._override, "state", None)
+        self._override.state = state
+        try:
+            yield
+        finally:
+            self._override.state = previous
+
     def _state(self, executor: Executor) -> dict | None:
+        override = getattr(self._override, "state", None)
+        if override is not None:
+            return override
         if executor.platform is not None:
             return jobs.platform_state(executor.platform)
         return self.state
