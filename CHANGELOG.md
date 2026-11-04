@@ -24,6 +24,9 @@ First development version, targeting the executor interface of Qibocal's
   or streamed back by remote workers, with the estimates and measured times
   of all of them (`Pending.timeline`, `Pending.phase`). The view updates in
   place, with fixed-width numbers, so that only values change.
+- `pending.started_at`: when an execution started, once confirmed with
+  `confirm`; times, totals and profiles count from there, not from the
+  submission.
 - `pending.profile()`: where the time of an execution went, step by step:
   remote jobs report their stages (out of the queue, imports, platform
   creation, connection, disconnection, encoding), also shown as phases while

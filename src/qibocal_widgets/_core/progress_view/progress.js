@@ -62,7 +62,7 @@ function render({ model, el }) {
   // -- header: built once ------------------------------------------------------
   const indicator = element("span", { class: "qw-indicator" });
   const phase = element("span", { class: "qw-phase" });
-  const submitted = element("span", { class: "qw-clock", title: "since submitted" });
+  const submitted = element("span", { class: "qw-clock", title: "since started" });
   const header = element(
     "div",
     { class: "qw-header" },

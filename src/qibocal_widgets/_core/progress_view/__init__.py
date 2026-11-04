@@ -37,7 +37,7 @@ class ProgressView(anywidget.AnyWidget):
     status = traitlets.Unicode().tag(sync=True)
     phase = traitlets.Unicode("").tag(sync=True)
     submitted = traitlets.Float().tag(sync=True)
-    """When submitted, in seconds since the epoch."""
+    """When started (submitted, until then), in seconds since the epoch."""
     started = traitlets.Float(None, allow_none=True).tag(sync=True)
     """When the acquisition started running, if it did."""
     ended = traitlets.Float(None, allow_none=True).tag(sync=True)
@@ -93,7 +93,7 @@ def _state(pending: Pending) -> dict[str, Any]:
     return {
         "status": pending.status,
         "phase": pending.phase or "",
-        "submitted": pending.submitted_at.timestamp(),
+        "submitted": pending._origin.timestamp(),
         "started": _epoch(timeline.started),
         "ended": _epoch(timeline.ended),
         "executions": [

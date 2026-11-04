@@ -76,7 +76,7 @@ def steps(pending: Pending) -> list[tuple[str, datetime, float]]:
 
     marks.sort(key=lambda mark: mark[0])
     rows = []
-    previous = pending.submitted_at
+    previous = pending._origin
     for at, label in marks:
         rows.append((label, at, max(0.0, (at - previous).total_seconds())))
         previous = at

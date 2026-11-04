@@ -314,3 +314,26 @@ def test_jupyter_run_again():
     again.click()
     wait_for(lambda: runner.count == 2 and pending.status == "done")
     wait_for(lambda: find_widget(box, widgets.Tab) is not None)
+
+
+def test_times_from_confirmation():
+    """Waiting for the Run button is not part of the execution's times."""
+    executor = Executor(
+        None,
+        targets=TARGETS,
+        update=False,
+        runner=Counting(),
+        frontends=[Confirmable()],
+        confirm=True,
+    )
+    pending = executor.submit(fake(npoints=3))
+    assert pending.started_at is None
+    time.sleep(0.5)  # before clicking Run
+    pending.start()
+    pending.result(10)
+    wait_for(lambda: pending.status == "done")
+    assert pending.started_at > pending.submitted_at
+    assert pending.elapsed < 0.4
+    profile = pending.profile()
+    assert profile["took (s)"].sum() < 0.4
+    assert profile["at (s)"].iloc[-1] == pytest.approx(pending.elapsed, abs=0.01)

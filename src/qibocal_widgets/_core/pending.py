@@ -101,6 +101,9 @@ class Pending:
         """The underlying future."""
         self.submitted_at = datetime.now(UTC)
         """When the execution was submitted (UTC)."""
+        self.started_at: datetime | None = None
+        """When it started (UTC): once confirmed, with ``confirm``, or as soon
+        as submitted otherwise. Times and profiles count from there."""
         self.finished_at: datetime | None = None
         """When it completed (UTC)."""
         self.views: dict[str, View] = {}
@@ -139,6 +142,7 @@ class Pending:
             if self._status != READY:
                 return
             self._status = WAITING
+            self.started_at = datetime.now(UTC)
         self._notify()
         self._dispatch()
 
@@ -166,7 +170,7 @@ class Pending:
                 return
             self.future = Future()
             self._runs += 1
-            self.submitted_at = datetime.now(UTC)
+            self.submitted_at = self.started_at = datetime.now(UTC)
             self.finished_at = None
             self.timeline = Timeline()
             self._phase = None
@@ -273,11 +277,17 @@ class Pending:
 
     @property
     def elapsed(self) -> float | None:
-        """Seconds from submission (or the latest run) to completion, if
-        completed: including waiting, e.g. in the queue."""
+        """Seconds from the start (confirmation, with ``confirm``, or
+        submission; or the latest run) to completion, if completed: including
+        waiting, e.g. in the queue."""
         if self.finished_at is None:
             return None
-        return (self.finished_at - self.submitted_at).total_seconds()
+        return (self.finished_at - self._origin).total_seconds()
+
+    @property
+    def _origin(self) -> datetime:
+        """Where times count from: the start, if started."""
+        return self.started_at or self.submitted_at
 
     def _resolve(self, completed: Completed) -> None:
         self.finished_at = datetime.now(UTC)
@@ -353,7 +363,8 @@ class Pending:
 
     def profile(self) -> Any:
         """Where the time went, as a table (a pandas ``DataFrame``): each step,
-        and how long it took to reach it, from the submission.
+        and how long it took to reach it, from the start (the confirmation,
+        with ``confirm``; the submission otherwise).
 
         Remote jobs report their stages (out of the queue, imports, platform
         creation, connection, the executions, disconnection, encoding), and
@@ -371,7 +382,7 @@ class Pending:
                 {
                     "step": label,
                     "took (s)": round(took, 3),
-                    "at (s)": round((at - self.submitted_at).total_seconds(), 3),
+                    "at (s)": round((at - self._origin).total_seconds(), 3),
                 }
                 for label, at, took in rows
             ]
