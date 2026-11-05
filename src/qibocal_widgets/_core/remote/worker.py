@@ -516,6 +516,7 @@ def package_versions() -> "dict[str, str]":
 GRACE = 10.0
 """Seconds between asking a cancelled job to stop, and killing it."""
 UNKNOWN = "Unknown remote job"
+"""Error of jobs to follow which were never launched (or removed)."""
 
 
 def alive(group: int) -> bool:
@@ -527,7 +528,7 @@ def alive(group: int) -> bool:
     except PermissionError:
         return True
     return True
-"""Error of jobs to follow which were never launched (or removed)."""
+
 
 JOBS_RETENTION = 7 * 24 * 3600
 """Seconds after which ended jobs which were never fetched are removed."""
