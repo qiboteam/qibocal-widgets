@@ -35,7 +35,15 @@ from .history import EDIT, UPDATE, PlatformHistory
 from .layout_platform import PlatformLayout
 from .middleware import Middleware
 from .output import REPORTS_DIR, default_path
-from .pending import ACQUIRING, PROCESSING, RUNNING, WAITING_EARLIER, Pending
+from .pending import (
+    ACQUIRING,
+    CANCELLED,
+    PROCESSING,
+    RUNNING,
+    WAITING_EARLIER,
+    Cancelled,
+    Pending,
+)
 from .profile import Trace, versions
 from .protocols import reference, registered_name
 from .remote.worker import parameters_document
@@ -398,6 +406,9 @@ class Executor(QibocalExecutor):
         if key is not None:
             with self._order:
                 running = self._running.get(key)
+                if running is not None and running.status == CANCELLED:
+                    self._running.pop(key, None)  # before it started
+                    running = None
             if running is not None:
                 return self._submitted_to_frontends(running)
             # only registered protocols can be loaded back from disk
@@ -591,6 +602,8 @@ class Executor(QibocalExecutor):
         try:
             lock = nullcontext() if self.runner.concurrent else self._instruments
             with lock:
+                if pending._cancel.is_set():  # while waiting for its turn
+                    raise Cancelled()
                 phase = self.runner.acquiring_phase(self)
                 pending.phase = phase
                 pending._set(ACQUIRING)
@@ -608,6 +621,8 @@ class Executor(QibocalExecutor):
                             acquired = self._chain("acquire", bound, **kwargs)
         except BaseException as exception:  # noqa: BLE001 - reported to the caller
             error = exception
+        if error is None and pending._cancel.is_set():
+            error = Cancelled()  # asked too late to stop it: discarded
         pending.phase = None
         pending._set(PROCESSING)
         if pending.timeline.started is not None and pending.timeline.ended is None:

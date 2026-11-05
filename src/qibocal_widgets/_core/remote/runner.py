@@ -19,6 +19,7 @@ from ..runner import Runner
 from . import jobs, queue, transport
 from .config import CONNECTION_VARIABLE, Connection, load_connection
 from .transport import RemoteError
+from .worker import Cancelled
 
 if TYPE_CHECKING:
     from ..executor import Executor
@@ -293,8 +294,8 @@ class Remote(Runner):
                     )
         try:
             outcome = transport.run(self.connection, job, compute=True, name=name)
-        except RemoteError as error:
-            if name is not None and error.ended:
+        except (RemoteError, Cancelled) as error:
+            if name is not None and getattr(error, "ended", True):
                 self._forget(executor, name)
             raise
         return self._fetched(executor, bound, outcome, name)
@@ -307,8 +308,8 @@ class Remote(Runner):
         progress.report("stage", None, "followed")
         try:
             outcome = transport.run(self.connection, job, compute=True, follow=name)
-        except RemoteError as error:
-            if error.ended:
+        except (RemoteError, Cancelled) as error:
+            if getattr(error, "ended", True):
                 self._forget(executor, name)
             raise
         return self._fetched(executor, bound, outcome, name)

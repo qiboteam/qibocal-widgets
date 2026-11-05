@@ -193,3 +193,24 @@
     left: 100%;
   }
 }
+
+.qw-progress .qw-cancel {
+  font-size: 11px;
+  padding: 0 6px;
+  min-width: 7.5em;
+  border: 1px solid var(--qw-border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.qw-progress .qw-cancel:hover:not(:disabled) {
+  color: var(--qw-over);
+  border-color: var(--qw-over);
+}
+
+.qw-progress .qw-cancel:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

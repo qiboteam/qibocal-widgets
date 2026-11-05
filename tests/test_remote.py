@@ -967,3 +967,55 @@ def test_platform_updates_remote(cluster, bound, mock_frequency):
     assert executor.platform_state[f"parameters.{path}"] == mock_frequency[0]
     assert executor.acquire(bound).data.scale[0] == mock_frequency[0]
     assert len(executor.history) == 0
+
+
+# -- cancellation ------------------------------------------------------------------
+
+
+def test_cancel_queued(cluster, tmp_path, monkeypatch, bound):
+    """A queued job is stopped, and forgotten."""
+    monkeypatch.setenv("FAKE_SLEEP", "30")  # e.g. waiting in the queue
+    path = tmp_path / "session"
+    executor = Executor(
+        None,
+        path=path,
+        targets=TARGETS,
+        update=False,
+        runner=Remote(ssh="me@login", queue="chip", platform="mock"),
+    )
+    pending = executor.submit(bound)
+    wait_for(lambda: (path / "remote-jobs.json").exists())
+    (name,) = json.loads((path / "remote-jobs.json").read_text())
+    wait_for(lambda: (_jobs_folder(tmp_path) / name / "pid").exists())
+    start = __import__("time").monotonic()
+    assert pending.cancel()
+    from qibocal_widgets import Cancelled
+
+    with pytest.raises(Cancelled):
+        pending.result(20)
+    assert __import__("time").monotonic() - start < 5  # not the 30 s
+    assert pending.status == "cancelled"
+    wait_for(lambda: not (path / "remote-jobs.json").exists())
+    assert not (_jobs_folder(tmp_path) / name).exists()
+
+
+def test_cancel_in_agent(cluster):
+    """Without a queue, the acquisition stops between platform executions."""
+    from fake import EXECUTIONS, FakeParameters, looped
+
+    from qibocal_widgets import Cancelled
+
+    executor = Executor(
+        None,
+        targets=TARGETS,
+        update=False,
+        runner=Remote(ssh="me@login", platform="mock"),
+    )
+    pending = executor.submit(looped(pars=FakeParameters(npoints=3)))
+    wait_for(lambda: len(pending.timeline.executions) >= 2)
+    pending.cancel()
+    with pytest.raises(Cancelled):
+        pending.result(20)
+    assert len(pending.timeline.executions) < EXECUTIONS
+    # the agent is still serving
+    assert executor.acquire(fake(npoints=3)).data.scale

@@ -116,9 +116,33 @@ def estimates(callback):
                     logger.setLevel(_estimates_levels.pop(name)[0])
 
 
+class Cancelled(BaseException):
+    """The execution was cancelled.
+
+    A ``BaseException``, as ``KeyboardInterrupt``, so that it is not caught by
+    the handlers of failures along the way.
+    """
+
+
+def check_cancelled() -> None:
+    """Stop here if the job of the current thread was cancelled.
+
+    Called where qibolab logs its estimates: before every execution on the
+    platform, and every batch, so that a cancelled acquisition stops between
+    them, in a consistent state.
+
+    Raises:
+        Cancelled: if the job was cancelled.
+    """
+    flag = getattr(_output, "cancel", None)
+    if flag is not None and flag.is_set():
+        raise Cancelled()
+
+
 def emit_estimate(seconds: float, kind: str) -> None:
-    """Write a duration estimate line."""
+    """Write a duration estimate line, then stop if cancelled."""
     emit_event(kind, seconds)
+    check_cancelled()
 
 
 def emit_event(
@@ -289,10 +313,15 @@ def agent(venv: str) -> int:
         finally:
             _output.job = None
 
+    flags: dict[str, threading.Event] = {}
+    """Cancellation flags of the jobs running here."""
+
     def serve(request: dict) -> None:
         job_id = str(request["id"])
         job = request["job"]
         _output.job = job_id
+        if request.get("srun") is None:
+            _output.cancel = flags.setdefault(job_id, threading.Event())
         try:
             if job.get("platforms_dir"):
                 os.environ[PLATFORMS] = str(Path(job["platforms_dir"]).expanduser())
@@ -300,9 +329,12 @@ def agent(venv: str) -> int:
                 launch(job_id, job, request["srun"], request["name"])
                 return
             action = job["action"]
+            check_cancelled()  # e.g. before its turn
             if action == "acquire":
                 emit_event("started")
             emit({"ok": True, **ACTIONS[action](job)})
+        except Cancelled:
+            emit({"ok": False, "error": "Cancelled", "cancelled": True})
         except Exception as error:  # noqa: BLE001 - any failure is reported
             emit(
                 {
@@ -313,6 +345,8 @@ def agent(venv: str) -> int:
             )
         finally:
             _output.job = None
+            _output.cancel = None
+            flags.pop(job_id, None)
 
     names: dict[str, str] = {}
     """The job folder of each request, to cancel it."""
@@ -371,6 +405,9 @@ def agent(venv: str) -> int:
                         write(line)
                         if line.startswith(MARKER):
                             return
+                if ended and (folder / "cancelled").exists():
+                    emit({"ok": False, "error": "Cancelled", "cancelled": True})
+                    return
                 if ended:
                     code = (folder / "exit").read_text().strip()
                     errors = folder / "stderr.log"
@@ -388,16 +425,35 @@ def agent(venv: str) -> int:
             names.pop(job_id, None)
 
     def cancel(job_id: str) -> None:
-        name = names.get(job_id)
-        if name is None:
+        if job_id in flags:  # running here: stops at its next estimate
+            flags[job_id].set()
             return
-        folder = jobs_dir() / name
+        name = names.get(job_id)
+        if name is not None:
+            threading.Thread(target=terminate, args=(name,), daemon=True).start()
+
+    def terminate(name: str) -> None:
+        """Stop a queued job: SIGTERM, which srun forwards (and qibolab handles
+        by disconnecting the instruments), then SIGKILL after a grace period."""
         import signal
 
-        with contextlib.suppress(OSError, ValueError, ProcessLookupError):
-            os.killpg(int((folder / "pid").read_text()), signal.SIGKILL)
+        folder = jobs_dir() / name
+        try:
+            group = int((folder / "pid").read_text())
+        except (OSError, ValueError):
+            return
         with contextlib.suppress(OSError):
-            (folder / "exit").write_text("cancelled")
+            (folder / "cancelled").write_text("")  # before it exits
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(group, signal.SIGTERM)
+        deadline = time.monotonic() + GRACE
+        while time.monotonic() < deadline and alive(group):
+            time.sleep(0.1)
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(group, signal.SIGKILL)
+        with contextlib.suppress(OSError):
+            if not (folder / "exit").exists():
+                (folder / "exit").write_text("cancelled")
 
     def forget(name: str) -> None:
         shutil.rmtree(jobs_dir() / name, ignore_errors=True)
@@ -457,7 +513,20 @@ def package_versions() -> "dict[str, str]":
     return found
 
 
+GRACE = 10.0
+"""Seconds between asking a cancelled job to stop, and killing it."""
 UNKNOWN = "Unknown remote job"
+
+
+def alive(group: int) -> bool:
+    """Whether any process of a process group is still running."""
+    try:
+        os.killpg(group, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 """Error of jobs to follow which were never launched (or removed)."""
 
 JOBS_RETENTION = 7 * 24 * 3600

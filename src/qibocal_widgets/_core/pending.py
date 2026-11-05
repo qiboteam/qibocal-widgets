@@ -15,9 +15,10 @@ from qibocal.auto.operation import BoundProtocol
 
 from .completed import MARIMO, MIMEBUNDLE, Completed, View
 from .protocols import reference
+from .remote.worker import Cancelled
 from .timeline import ACQUIRED, BATCH, EXECUTION, STAGE, STARTED, Event, Timeline
 
-__all__ = ["Estimate", "NotStartedError", "Pending"]
+__all__ = ["Cancelled", "Estimate", "NotStartedError", "Pending"]
 
 
 class NotStartedError(RuntimeError):
@@ -34,7 +35,10 @@ PROCESSING = "processing"
 """Recording, fitting, reporting, updating; or waiting for earlier executions to."""
 DONE = "done"
 FAILED = "failed"
-STATES = (READY, WAITING, ACQUIRING, PROCESSING, DONE, FAILED)
+CANCELLED = "cancelled"
+"""Cancelled before its end (see :meth:`Pending.cancel`)."""
+STATES = (READY, WAITING, ACQUIRING, PROCESSING, DONE, FAILED, CANCELLED)
+ENDED = (DONE, FAILED, CANCELLED)
 
 
 @dataclass(frozen=True)
@@ -110,7 +114,8 @@ class Pending:
         """Views registered by frontends, keyed by display protocol."""
         self.timeline = Timeline()
         """Events of the acquisition: start, duration estimates, end."""
-        self.context: dict[str, Any] = {}
+        self._cancel = threading.Event()
+        self.context: dict[str, Any] = {"cancel": self._cancel}
         """Where and how it ran, for its profile (see ``Completed.profile``)."""
         self._view_state: dict[str, Any] = {}
         """State of the displayed views to keep across updates (e.g. folds)."""
@@ -150,6 +155,41 @@ class Pending:
         self._notify()
         self._dispatch()
 
+    def cancel(self) -> bool:
+        """Cancel the execution, as its *Cancel* button does.
+
+        - Not started yet (``ready``, or ``waiting``): it never acquires.
+        - Acquiring through the queue: the remote job is stopped (``SIGTERM``,
+          on which qibolab disconnects the instruments, then ``SIGKILL``).
+        - Acquiring in a process of this kernel, or in a remote agent: it
+          stops before its next execution on the platform, or batch, without
+          interrupting the current one.
+
+        Processing (recording, fitting, reporting) is not cancelled. The
+        execution then ends as ``cancelled``: ``result()`` raises
+        :class:`Cancelled`.
+
+        Returns:
+            Whether the execution will be cancelled.
+        """
+        with self._lock:
+            status = self._status
+            if status not in (READY, WAITING, ACQUIRING):
+                return False
+            self._cancel.set()
+            if status == READY:
+                self._launcher = None
+        if status == READY:
+            self._fail(Cancelled())
+        else:
+            self._notify()
+        return True
+
+    @property
+    def cancelling(self) -> bool:
+        """Whether a cancellation was asked, and the execution is not over."""
+        return self._cancel.is_set() and self._status not in ENDED
+
     def update(self, targets: Any = None) -> list:
         """Apply the platform update of the completed execution, as
         :meth:`Completed.update <qibocal_widgets.Completed.update>`.
@@ -170,9 +210,11 @@ class Pending:
         happens while running, or waiting for confirmation.
         """
         with self._lock:
-            if self._status not in (DONE, FAILED) or self._rerun is None:
+            if self._status not in ENDED or self._rerun is None:
                 return
             self.future = Future()
+            self._cancel = threading.Event()
+            self.context = {"cancel": self._cancel}
             self._runs += 1
             self.submitted_at = self.started_at = datetime.now(UTC)
             self.finished_at = None
@@ -304,7 +346,7 @@ class Pending:
         self.finished_at = datetime.now(UTC)
         self.phase = None
         self.future.set_exception(error)
-        self._set(FAILED)
+        self._set(CANCELLED if isinstance(error, Cancelled) else FAILED)
         self._completed()
 
     def _completed(self) -> None:
@@ -360,6 +402,8 @@ class Pending:
         """A short description of the state."""
         if self._status == FAILED:
             return f"{self.name}: failed, {self.future.exception()!r}"
+        if self._status == CANCELLED:
+            return f"{self.name}: cancelled"
         if self._status == READY:
             return f"{self.name}: ready, waiting for confirmation"
         state = self._status if self.phase is None else f"{self._status}, {self.phase}"

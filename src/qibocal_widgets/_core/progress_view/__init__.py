@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 __all__ = ["ProgressView"]
 
-ENDED = ("done", "failed", "ready")
+ENDED = ("done", "failed", "cancelled", "ready")
 """States not shown by the view: the result, or the Run button."""
 
 HERE = Path(__file__).parent
@@ -47,6 +47,9 @@ class ProgressView(anywidget.AnyWidget):
     clock = traitlets.Float().tag(sync=True)
     """The kernel's time, at the latest update: the browser's clock is
     corrected by it."""
+    cancelling = traitlets.Bool(False).tag(sync=True)
+    """Whether a cancellation was asked (see ``Pending.cancel``)."""
+    cancellable = traitlets.Bool(True).tag(sync=True)
     unfolded = traitlets.Bool(False).tag(sync=True)
     """Whether the list of estimates is unfolded (kept across updates)."""
 
@@ -72,9 +75,16 @@ class ProgressView(anywidget.AnyWidget):
             lambda change: pending._view_state.update(unfolded=change["new"]),
             names=["unfolded"],
         )
+        self._pending = pending
+        self.on_msg(self._message)
         self._remove: Callable[[], None] | None = None
         if schedule is not None:
             self._remove = pending.on_change(lambda p: schedule(self._follow, p))
+
+    def _message(self, widget, content: dict, buffers) -> None:
+        if content.get("kind") == "cancel":
+            self._pending.cancel()
+            self.cancelling = self._pending.cancelling
 
     def _follow(self, pending: Pending) -> None:
         if pending.status in ENDED:
@@ -113,6 +123,8 @@ def _state(pending: Pending) -> dict[str, Any]:
             for execution in timeline.executions
         ],
         "clock": time.time(),
+        "cancelling": pending.cancelling,
+        "cancellable": pending.status in ("waiting", "acquiring"),
     }
 
 

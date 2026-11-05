@@ -97,3 +97,22 @@ def _estimated(params: FakeParameters, platform, targets: list[int]) -> FakeData
 
 
 estimated = Protocol(_estimated, _fit, _report, _update)
+
+
+EXECUTIONS = 20
+"""Executions on the platform of the ``looped`` protocol."""
+
+
+def _looped(params: FakeParameters, platform, targets: list[int]) -> FakeData:
+    """Execute the "platform" several times, as many protocols do, logging an
+    estimate before each, as qibolab does."""
+    import time
+
+    log = logging.getLogger("qibolab._core.platform.platform")
+    for _ in range(EXECUTIONS):
+        log.info("Pulse execution time: 0.100 s")
+        time.sleep(0.1)
+    return _acquisition(params, platform, targets)
+
+
+looped = Protocol(_looped, _fit, _report, _update)

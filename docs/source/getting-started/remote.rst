@@ -278,6 +278,24 @@ Announcing the number of batches and executions in advance needs qibolab and
 Qibocal (`qibolab#1629 <https://github.com/qiboteam/qibolab/issues/1629>`_,
 `qibocal#1768 <https://github.com/qiboteam/qibocal/issues/1768>`_).
 
+**Cancelling.** ``pending.cancel()``, or the *✕ Cancel* button of its progress,
+ends an execution as ``cancelled`` (``pending.result()`` raises
+:class:`~qibocal_widgets.Cancelled`), offering to *Run again*:
+
+- not started yet (waiting for confirmation, for the instruments, or for its
+  turn): it never acquires;
+- queued remotely: the job is stopped, cancelling its allocation if still
+  waiting in the queue, with ``SIGTERM`` first (on which qibolab disconnects
+  the instruments), then ``SIGKILL`` after 10 s; the session forgets it;
+- acquiring in the kernel, or in a remote agent without a queue: it stops
+  before its next execution on the platform, or batch, where qibolab logs its
+  estimates; the current one is not interrupted, so that the instruments are
+  left in a consistent state.
+
+Recording, fitting, and reporting are not cancelled: they are short, and the
+data are already recorded. Interrupting the kernel during a blocking remote
+call (``executor(bound)``) stops its remote job too.
+
 **Avoiding repeated acquisitions.** Notebooks run cells again, unintentionally
 too (in Marimo, whenever an upstream cell changes). With ``reuse=True``,
 ``submit`` returns an identical execution instead of acquiring again: one still

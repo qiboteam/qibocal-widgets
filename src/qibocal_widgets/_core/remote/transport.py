@@ -186,6 +186,17 @@ def _kill(process: subprocess.Popen) -> None:
         os.killpg(process.pid, signal.SIGKILL)
 
 
+def _terminate(process: subprocess.Popen) -> None:
+    """Stop a process and its children: SIGTERM (qibolab disconnects the
+    instruments), then SIGKILL after a grace period."""
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGTERM)
+    try:
+        process.wait(worker.GRACE)
+    except subprocess.TimeoutExpired:
+        _kill(process)
+
+
 def run(
     connection: Connection,
     job: dict,
@@ -248,6 +259,18 @@ def run_once(connection: Connection, job: dict, *, compute: bool) -> dict:
     reader = threading.Thread(target=lambda: errors.extend(process.stderr))
     reader.start()
     expired = threading.Event()
+    cancelled = threading.Event()
+    cancel = progress.current("cancel")
+    if cancel is not None:
+
+        def watch() -> None:
+            while process.poll() is None:
+                if cancel.wait(POLL):
+                    cancelled.set()
+                    _terminate(process)
+                    return
+
+        threading.Thread(target=watch, daemon=True).start()
     timer = None
     if connection.timeout is not None:
         timer = threading.Timer(
@@ -272,6 +295,8 @@ def run_once(connection: Connection, job: dict, *, compute: bool) -> dict:
             _kill(process)
             process.wait()
         reader.join()
+    if cancelled.is_set():
+        raise worker.Cancelled()
     if expired.is_set():
         raise RemoteError(
             f"Remote {job['action']} timed out after {connection.timeout} s"
@@ -311,6 +336,8 @@ def _outcome(job: dict, outcome: dict, errors: str) -> dict:
 
 
 EXITED = "The remote agent exited"
+POLL = 0.2
+"""Seconds between checks of a job's cancellation, while waiting for it."""
 
 
 class Agent:
@@ -404,6 +431,10 @@ class Agent:
             self._process.stdin.write(json.dumps(request) + "\n")
             self._process.stdin.flush()
 
+    def _cancel(self, job_id: str) -> None:
+        with contextlib.suppress(OSError):
+            self._send({"cancel": job_id})
+
     def forget(self, name: str) -> None:
         """Remove the folder of a detached job."""
         self._send({"forget": name})
@@ -443,18 +474,28 @@ class Agent:
                     "".join(self._errors),
                     ended=False,
                 ) from error
+            cancel = progress.current("cancel")
+            asked = False
             while True:
+                if cancel is not None and cancel.is_set() and not asked:
+                    self._cancel(job_id)
+                    asked = True
                 remaining = None if deadline is None else deadline - time.monotonic()
-                try:
-                    if remaining is not None and remaining <= 0:
-                        raise queue.Empty
-                    payload = channel.get(timeout=remaining)
-                except queue.Empty:
-                    with contextlib.suppress(OSError):
-                        self._send({"cancel": job_id})
+                if remaining is not None and remaining <= 0:
+                    self._cancel(job_id)
                     raise RemoteError(
                         f"Remote {job['action']} timed out after {timeout} s"
-                    ) from None
+                    )
+                try:
+                    payload = channel.get(
+                        timeout=POLL if remaining is None else min(POLL, remaining)
+                    )
+                except queue.Empty:
+                    continue
+                except KeyboardInterrupt:
+                    # interrupting the kernel stops the remote job too
+                    self._cancel(job_id)
+                    raise
                 if payload is None:
                     raise RemoteError(
                         f"Remote {job['action']}: the agent exited",
@@ -462,7 +503,10 @@ class Agent:
                         ended=False,
                     )
                 if payload.startswith(worker.MARKER):
-                    return _outcome(job, json.loads(payload[len(worker.MARKER) :]), "")
+                    outcome = json.loads(payload[len(worker.MARKER) :])
+                    if outcome.get("cancelled"):
+                        raise worker.Cancelled()
+                    return _outcome(job, outcome, "")
                 if payload.startswith(worker.PROGRESS):
                     _progress(payload)
         finally:

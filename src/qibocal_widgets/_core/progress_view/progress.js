@@ -63,13 +63,27 @@ function render({ model, el }) {
   const indicator = element("span", { class: "qw-indicator" });
   const phase = element("span", { class: "qw-phase" });
   const submitted = element("span", { class: "qw-clock", title: "since started" });
+  const cancel = element(
+    "button",
+    {
+      class: "qw-cancel",
+      title: "Cancel: queued jobs are stopped; running ones stop before their next execution on the platform",
+      onclick: () => {
+        cancel.disabled = true;
+        cancel.textContent = "cancelling…";
+        model.send({ kind: "cancel" });
+      },
+    },
+    "✕ Cancel"
+  );
   const header = element(
     "div",
     { class: "qw-header" },
     indicator,
     element("span", { class: "qw-name" }, model.get("name")),
     phase,
-    submitted
+    submitted,
+    cancel
   );
   const body = element("div", { class: "qw-body" });
   const root = element("div", { class: "qw-progress" }, header, body);
@@ -253,6 +267,11 @@ function render({ model, el }) {
     indicator.className = `qw-indicator qw-${processing ? "processing" : status === "waiting" ? "waiting" : "acquiring"}`;
     phase.className = `qw-phase qw-${processing ? "processing" : "acquiring"}`;
     phase.textContent = processing ? name || "processing" : PHASES[name] || name || PHASES[status] || status;
+    // the same element, and size, in every state: only its label changes
+    const cancelling = model.get("cancelling");
+    cancel.disabled = cancelling || !model.get("cancellable");
+    cancel.textContent = cancelling ? "cancelling…" : "✕ Cancel";
+    cancel.style.visibility = model.get("cancellable") || cancelling ? "visible" : "hidden";
     const kind = layout();
     if (kind !== built) build(kind);
     if (labels.execution) {
@@ -271,7 +290,7 @@ function render({ model, el }) {
   model.on("change:clock", () => {
     offset = Date.now() / 1000 - model.get("clock");
   });
-  for (const name of ["status", "phase", "executions", "started", "ended"]) {
+  for (const name of ["status", "phase", "executions", "started", "ended", "cancelling", "cancellable"]) {
     model.on(`change:${name}`, update);
   }
   update();

@@ -14,7 +14,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from .remote.worker import estimates
+from .remote.worker import Cancelled, estimates
 
 __all__ = ["annotate", "current", "report", "reporting"]
 
@@ -37,10 +37,19 @@ def reporting(
     _current.callback = callback
     _current.context = {} if context is None else context
     try:
-        with estimates(lambda seconds, kind: callback(kind, seconds)):
+        with estimates(lambda seconds, kind: _estimated(callback, kind, seconds)):
             yield
     finally:
         _current.callback, _current.context = previous
+
+
+def _estimated(callback: Callable[..., None], kind: str, seconds: float) -> None:
+    """Pass an estimate on, then stop here if the acquisition was cancelled:
+    before the execution, or the batch, it estimates."""
+    callback(kind, seconds)
+    cancel = current("cancel")
+    if cancel is not None and cancel.is_set():
+        raise Cancelled()
 
 
 def annotate(**values: Any) -> None:

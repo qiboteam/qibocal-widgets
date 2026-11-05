@@ -18,7 +18,7 @@ from .button import again_button, run_button, update_button
 from .completed import MIMEBUNDLE, Completed
 from .data import data_frames
 from .frontend import Frontend
-from .pending import DONE, FAILED, READY, Pending
+from .pending import CANCELLED, DONE, FAILED, READY, Pending
 from .profile_view import ProfileView
 from .progress_view import ProgressView
 from .reports import Report, reports, reports_of
@@ -233,7 +233,7 @@ class Jupyter(Frontend):
                         total=pending.elapsed,
                     )
                 ]
-            elif pending.status == FAILED:
+            elif pending.status in (FAILED, CANCELLED):
                 box.children = [
                     again_button(pending),
                     widgets.HTML(f"<pre>{pending.describe()}</pre>"),

@@ -37,6 +37,11 @@ First development version, targeting the executor interface of Qibocal's
 - `pending.started_at`: when an execution started, once confirmed with
   `confirm`; times, totals and profiles count from there, not from the
   submission.
+- Cancelling executions: `pending.cancel()`, and a *Cancel* button on their
+  progress, ending them as `cancelled` (`Cancelled`): queued remote jobs are
+  stopped (`SIGTERM`, then `SIGKILL`), in-process acquisitions stop before
+  their next execution on the platform, executions not started never start;
+  interrupting the kernel stops the remote job of a blocking call.
 - `platform_updates`: values set by path for one execution only, as the
   `updates` of `platform.execute`, for `submit`, `acquire` and blocking
   calls, locally and remotely; the platform state and its history are not

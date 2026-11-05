@@ -16,7 +16,7 @@ from .button import again_button, run_button, update_button
 from .completed import MARIMO, Completed
 from .data import data_frames
 from .frontend import Frontend
-from .pending import DONE, FAILED, READY, Pending
+from .pending import CANCELLED, DONE, ENDED, FAILED, READY, Pending
 from .profile_view import ProfileView
 from .progress_view import ProgressView
 from .reports import Report, reports, reports_of
@@ -223,9 +223,10 @@ class Marimo(Frontend):
             return display(
                 pending.result(), actions=[again_button(pending)], total=pending.elapsed
             )
-        if pending.status == FAILED:
+        if pending.status in (FAILED, CANCELLED):
             again = mo.ui.anywidget(again_button(pending))
-            error = mo.callout(mo.md(f"**{pending.describe()}**"), kind="danger")
+            kind = "danger" if pending.status == FAILED else "neutral"
+            error = mo.callout(mo.md(f"**{pending.describe()}**"), kind=kind)
             return mo.vstack([again, error])
         if pending.status == READY:
             return mo.ui.anywidget(run_button(pending))
@@ -240,8 +241,6 @@ _RENDERED: dict[str, tuple[object, set[int], float]] = {}
 """Pending executions displayed by each cell, in its latest run (by identity),
 and when the run first displayed one."""
 
-ENDED = (DONE, FAILED)
-"""States of a completed execution."""
 POLL = 1.0
 """Seconds between checks of a followed execution, besides its changes."""
 IDLE = 10.0
