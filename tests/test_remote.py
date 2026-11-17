@@ -6,6 +6,7 @@ environment delegation) is exercised for real.
 """
 
 import ast
+import errno
 import json
 import os
 import shutil
@@ -480,6 +481,52 @@ def test_install(cluster, tmp_path):
 def test_install_on_compute(cluster):
     Remote(queue="chip", venv="fresh", rebuild_on_compute=True).install()
     assert [call["tool"] for call in cluster()] == ["srun", "uv", "uv"]
+
+
+def test_install_rebuild_directory_race(cluster, monkeypatch):
+    env = worker.environment_path("fresh")
+    worker.install({"venv": "fresh"})
+    package = env / "lib" / "PIL"
+    package.mkdir(parents=True)
+    rmdir = os.rmdir
+    raced = False
+
+    def removing(path, *, dir_fd=None):
+        nonlocal raced
+        if path == "PIL" and not raced:
+            raced = True
+            (package / "late.pyc").write_bytes(b"bytecode")
+        return rmdir(path, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "rmdir", removing)
+    assert worker.install({"venv": "fresh", "rebuild": True})["installed"]
+    assert raced
+    assert not package.exists()
+    assert (env / worker.REQUIREMENTS).is_file()
+
+
+@pytest.mark.parametrize("code", [errno.ENOTEMPTY, errno.EBUSY, errno.EACCES])
+def test_install_rebuild_removal_failure(cluster, monkeypatch, code):
+    worker.install({"venv": "fresh"})
+    before = cluster()
+    attempts = 0
+
+    def removing(path):
+        nonlocal attempts
+        attempts += 1
+        raise OSError(code, os.strerror(code), str(path / "lib" / "PIL"))
+
+    monkeypatch.setattr(worker.shutil, "rmtree", removing)
+    if code == errno.EACCES:
+        with pytest.raises(PermissionError):
+            worker.install({"venv": "fresh", "rebuild": True})
+    else:
+        with pytest.raises(RuntimeError, match="select a fresh venv name") as error:
+            worker.install({"venv": "fresh", "rebuild": True})
+        assert error.value.__cause__.errno == code
+        assert str(worker.environment_path("fresh")) in str(error.value)
+    assert attempts == (3 if code == errno.ENOTEMPTY else 1)
+    assert cluster() == before
 
 
 def test_install_pip_fallback(tmp_path, monkeypatch):

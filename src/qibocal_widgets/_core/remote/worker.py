@@ -20,6 +20,7 @@ quoted.
 
 import base64
 import contextlib
+import errno
 import json
 import logging
 import os
@@ -220,7 +221,23 @@ def install(job: dict) -> dict:
     python = environment_python(env)
     uv = find_uv()
     if job.get("rebuild") and (env / "pyvenv.cfg").is_file():
-        shutil.rmtree(env)
+        for attempt in range(3):
+            try:
+                shutil.rmtree(env)
+                break
+            except OSError as error:
+                if error.errno not in (errno.ENOTEMPTY, errno.EBUSY):
+                    raise
+                if error.errno == errno.ENOTEMPTY and attempt < 2:
+                    # A running interpreter may create bytecode during removal.
+                    time.sleep(0.1)
+                    continue
+                raise RuntimeError(
+                    f"Cannot remove remote environment {env}: {error}. "
+                    "The existing environment may have been partially removed. "
+                    "Stop workers and jobs using it before cleaning it up "
+                    "(NFS may retain open files), or select a fresh venv name."
+                ) from error
     if not python.exists():
         interpreter = job.get("python") or sys.executable
         if uv is not None:
