@@ -175,7 +175,21 @@ package is listed in the ``requirements`` of the connection; protocols defined
 in a notebook cell cannot be executed remotely.
 
 Failures raise :class:`~qibocal_widgets.remote.RemoteError`, carrying the
-remote traceback or error output.
+remote traceback together with available standard error, including installer
+diagnostics and the logs of failed queued jobs. The displayed exception shows
+the last 20 lines; its ``details`` attribute retains the complete diagnostics
+received from the remote machine. Agent standard error is a shared, recent
+log, labelled separately from a queued job's own standard error.
+
+.. code-block:: python
+
+    from qibocal_widgets.remote import RemoteError
+
+    try:
+        remote.install(rebuild=True)
+    except RemoteError as error:
+        print(error.message)
+        print(error.details)  # include this output when reporting a failure
 
 Background execution
 --------------------

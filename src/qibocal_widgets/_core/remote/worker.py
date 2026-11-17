@@ -408,6 +408,7 @@ def agent(venv: str) -> int:
         output = folder / "stdout.log"
         position = 0
         pending = ""
+        outcome = None
         try:
             while True:
                 ended = (folder / "exit").exists()
@@ -419,9 +420,13 @@ def agent(venv: str) -> int:
                     pending += chunk
                     *lines, pending = pending.split("\n")
                     for line in lines:
-                        write(line)
                         if line.startswith(MARKER):
+                            outcome = json.loads(line[len(MARKER) :])
+                            if not outcome.get("ok") and not outcome.get("cancelled"):
+                                continue
+                            write(line)
                             return
+                        write(line)
                 if ended and (folder / "cancelled").exists():
                     emit({"ok": False, "error": "Cancelled", "cancelled": True})
                     return
@@ -429,11 +434,14 @@ def agent(venv: str) -> int:
                     code = (folder / "exit").read_text().strip()
                     errors = folder / "stderr.log"
                     details = errors.read_text() if errors.exists() else ""
+                    if outcome is not None:
+                        emit({**outcome, "stderr": details})
+                        return
                     emit(
                         {
                             "ok": False,
                             "error": f"Job exited with code {code} and no outcome",
-                            "traceback": "\n".join(details.splitlines()[-40:]),
+                            "stderr": details,
                         }
                     )
                     return

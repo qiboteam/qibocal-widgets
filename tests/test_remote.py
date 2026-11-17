@@ -405,6 +405,73 @@ def test_builtin_protocol(cluster):
 # -- failures --------------------------------------------------------------------------
 
 
+def test_error_display_points_to_full_diagnostics():
+    details = "\n".join(f"diagnostic {i}" for i in range(50))
+    error = RemoteError("Remote install failed", details)
+    assert error.details == details
+    assert "full diagnostics in exception.details" in str(error)
+    assert "diagnostic 0\n" not in str(error)
+    assert "diagnostic 49" in str(error)
+
+
+@pytest.mark.parametrize("with_outcome", [True, False])
+def test_queued_failure_keeps_stderr(cluster, tmp_path, with_outcome):
+    details = "original diagnostic\n" + "".join(f"log {i}\n" for i in range(60))
+    execute = "os.execvp(args[index], args[index:])"
+    executable(
+        tmp_path / "bin" / "srun",
+        FAKE_SRUN.replace(
+            execute,
+            f"sys.stderr.write({details!r})\nsys.stderr.flush()\n"
+            + (execute if with_outcome else "sys.exit(2)"),
+        ),
+    )
+    with pytest.raises(RemoteError) as error:
+        transport.run(
+            Connection(ssh="me@login", queue="chip"),
+            {"action": "missing"},
+            compute=True,
+        )
+    assert details.strip() in error.value.details
+    if with_outcome:
+        assert "Traceback" in error.value.details
+        assert "KeyError" in error.value.message
+    else:
+        assert "code 2 and no outcome" in error.value.message
+
+
+def test_agent_failure_keeps_shared_stderr(cluster, tmp_path):
+    executable(
+        tmp_path / "bin" / "ssh",
+        "import sys\nsys.stderr.write('agent diagnostic\\n')\nsys.stderr.flush()\n"
+        + FAKE_SSH,
+    )
+    connection = Connection(ssh="me@login")
+    agent = transport.agent(connection)
+    wait_for(lambda: "agent diagnostic" in "".join(agent._errors))
+    with pytest.raises(RemoteError) as error:
+        transport.run(connection, {"action": "missing"}, compute=False)
+    assert "Traceback" in error.value.details
+    assert "Agent stderr (shared across jobs):\nagent diagnostic" in error.value.details
+
+
+def test_timeout_keeps_stderr(cluster, tmp_path):
+    executable(
+        tmp_path / "bin" / "ssh",
+        "import sys, time\n"
+        "sys.stderr.write('connection diagnostic\\n')\n"
+        "sys.stderr.flush()\n"
+        "time.sleep(5)\n",
+    )
+    with pytest.raises(RemoteError, match="timed out") as error:
+        transport.run_once(
+            Connection(ssh="me@login", timeout=0.5),
+            {"action": "install"},
+            compute=False,
+        )
+    assert "connection diagnostic" in error.value.details
+
+
 def test_missing_environment(bound, cluster):
     executor = Executor(
         None,
@@ -481,6 +548,25 @@ def test_install(cluster, tmp_path):
 def test_install_on_compute(cluster):
     Remote(queue="chip", venv="fresh", rebuild_on_compute=True).install()
     assert [call["tool"] for call in cluster()] == ["srun", "uv", "uv"]
+
+
+def test_install_failure_keeps_stderr(cluster, tmp_path):
+    bin = tmp_path / "bin"
+    executable(
+        bin / "uv",
+        FAKE_UV
+        + """
+if args[0] == "pip":
+    sys.stderr.write("error: installer diagnostic\\n")
+    sys.exit(2)
+""",
+    )
+    with pytest.raises(RemoteError, match="CalledProcessError") as error:
+        Remote(ssh="me@login", venv="fresh").install()
+    assert "Traceback" in error.value.details
+    assert "error: installer diagnostic" in error.value.details
+    assert "error: installer diagnostic" in str(error.value)
+    assert not (worker.environment_path("fresh") / worker.REQUIREMENTS).exists()
 
 
 def test_install_rebuild_directory_race(cluster, monkeypatch):

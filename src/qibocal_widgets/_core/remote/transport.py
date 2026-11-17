@@ -79,15 +79,20 @@ class RemoteError(RuntimeError):
         super().__init__(message)
         self.message = message
         self.details = details
-        """Remote traceback, or standard error, when available."""
+        """Remote traceback and standard error, when available, without display truncation."""
         self.ended = ended
         """Whether the job is over: ``False`` when only the connection to it
         was lost (a detached job may still be running)."""
 
     def __str__(self) -> str:
-        lines = self.details.strip().splitlines()[-self.TAIL :]
+        lines = self.details.strip().splitlines()
         if not lines:
             return self.message
+        if len(lines) > self.TAIL:
+            lines = [
+                f"[Showing last {self.TAIL} lines; full diagnostics in exception.details]",
+                *lines[-self.TAIL :],
+            ]
         return "\n".join([self.message, "", *lines])
 
 
@@ -299,7 +304,8 @@ def run_once(connection: Connection, job: dict, *, compute: bool) -> dict:
         raise worker.Cancelled()
     if expired.is_set():
         raise RemoteError(
-            f"Remote {job['action']} timed out after {connection.timeout} s"
+            f"Remote {job['action']} timed out after {connection.timeout} s",
+            "".join(errors),
         )
     if outcome is None:
         raise RemoteError(
@@ -327,7 +333,17 @@ def _outcome(job: dict, outcome: dict, errors: str) -> dict:
     if not outcome.get("ok"):
         raise RemoteError(
             f"Remote {job['action']} failed: {outcome.get('error')}",
-            outcome.get("traceback") or errors,
+            "\n\n".join(
+                text.strip()
+                for text in (
+                    outcome.get("traceback"),
+                    f"Remote stderr:\n{outcome['stderr']}"
+                    if outcome.get("stderr")
+                    else "",
+                    errors,
+                )
+                if text
+            ),
         )
     return outcome
 
@@ -484,7 +500,8 @@ class Agent:
                 if remaining is not None and remaining <= 0:
                     self._cancel(job_id)
                     raise RemoteError(
-                        f"Remote {job['action']} timed out after {timeout} s"
+                        f"Remote {job['action']} timed out after {timeout} s",
+                        "".join(self._errors),
                     )
                 try:
                     payload = channel.get(
@@ -506,7 +523,14 @@ class Agent:
                     outcome = json.loads(payload[len(worker.MARKER) :])
                     if outcome.get("cancelled"):
                         raise worker.Cancelled()
-                    return _outcome(job, outcome, "")
+                    errors = "".join(self._errors)
+                    return _outcome(
+                        job,
+                        outcome,
+                        f"Agent stderr (shared across jobs):\n{errors}"
+                        if errors
+                        else "",
+                    )
                 if payload.startswith(worker.PROGRESS):
                     _progress(payload)
         finally:
